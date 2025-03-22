@@ -52,11 +52,17 @@ import {
   ArrowUp,
   ArrowDown,
   Barcode,
-  Package
+  Package,
+  Calendar,
+  Users,
+  Truck,
+  ClipboardList
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { InventoryItem, InventoryTransaction, TransactionType } from '@/types';
 import { mockInventoryItems, mockInventoryTransactions } from '@/data/mock-data';
+import { Textarea } from '@/components/ui/textarea';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 
 const Inventory = () => {
   const [items, setItems] = useState<InventoryItem[]>(mockInventoryItems);
@@ -66,13 +72,15 @@ const Inventory = () => {
   const [isAdjustDialogOpen, setIsAdjustDialogOpen] = useState(false);
   const [adjustmentType, setAdjustmentType] = useState<TransactionType>('adjustment_in');
   const [searchTerm, setSearchTerm] = useState('');
+  const [isTransactionSheetOpen, setIsTransactionSheetOpen] = useState(false);
+  const [transactionFormType, setTransactionFormType] = useState<TransactionType>('purchase');
   
   const filteredItems = items.filter(item => 
     item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.barcode.includes(searchTerm) ||
     item.sku.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
+  
   const handleAddItem = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     
@@ -190,6 +198,121 @@ const Inventory = () => {
     setIsAdjustDialogOpen(false);
   };
 
+  const handleDetailedTransaction = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    
+    const formData = new FormData(event.currentTarget);
+    const itemId = formData.get('itemId') as string;
+    const quantity = parseInt(formData.get('quantity') as string);
+    const notes = formData.get('notes') as string;
+    const date = formData.get('date') as string;
+    const selectedItem = items.find(item => item.id === itemId);
+    
+    if (!selectedItem) {
+      toast.error('Please select a valid product');
+      return;
+    }
+    
+    let totalAmount = 0;
+    let price = 0;
+    
+    // Different logic based on transaction type
+    switch (transactionFormType) {
+      case 'sale':
+        price = parseFloat(formData.get('price') as string) || selectedItem.price;
+        totalAmount = price * quantity;
+        // Reduce inventory
+        setItems(prevItems => 
+          prevItems.map(item => 
+            item.id === itemId 
+              ? { ...item, quantity: item.quantity - quantity, updatedAt: new Date().toISOString() }
+              : item
+          )
+        );
+        break;
+        
+      case 'purchase':
+        price = parseFloat(formData.get('price') as string) || selectedItem.cost;
+        totalAmount = price * quantity;
+        // Increase inventory
+        setItems(prevItems => 
+          prevItems.map(item => 
+            item.id === itemId 
+              ? { ...item, quantity: item.quantity + quantity, updatedAt: new Date().toISOString() }
+              : item
+          )
+        );
+        break;
+        
+      case 'adjustment_in':
+        price = selectedItem.cost;
+        totalAmount = price * quantity;
+        // Increase inventory
+        setItems(prevItems => 
+          prevItems.map(item => 
+            item.id === itemId 
+              ? { ...item, quantity: item.quantity + quantity, updatedAt: new Date().toISOString() }
+              : item
+          )
+        );
+        break;
+        
+      case 'adjustment_out':
+        price = selectedItem.cost;
+        totalAmount = price * quantity;
+        // Decrease inventory
+        setItems(prevItems => 
+          prevItems.map(item => 
+            item.id === itemId 
+              ? { ...item, quantity: item.quantity - quantity, updatedAt: new Date().toISOString() }
+              : item
+          )
+        );
+        break;
+        
+      case 'beginning':
+        price = parseFloat(formData.get('cost') as string) || selectedItem.cost;
+        totalAmount = price * quantity;
+        // Set inventory directly
+        setItems(prevItems => 
+          prevItems.map(item => 
+            item.id === itemId 
+              ? { ...item, quantity: quantity, cost: price, updatedAt: new Date().toISOString() }
+              : item
+          )
+        );
+        break;
+    }
+    
+    // Create transaction record
+    const newTransaction: InventoryTransaction = {
+      id: Date.now().toString(),
+      itemId,
+      type: transactionFormType,
+      quantity,
+      price,
+      totalAmount,
+      notes,
+      createdBy: '1', // Assuming admin user
+      createdAt: date ? new Date(date).toISOString() : new Date().toISOString()
+    };
+    
+    setTransactions([...transactions, newTransaction]);
+    toast.success(`${getTransactionTypeName(transactionFormType)} recorded successfully`);
+    setIsTransactionSheetOpen(false);
+  };
+
+  const getTransactionTypeName = (type: TransactionType): string => {
+    switch (type) {
+      case 'purchase': return 'Purchase';
+      case 'sale': return 'Sale';
+      case 'adjustment_in': return 'Adjustment (In)';
+      case 'adjustment_out': return 'Adjustment (Out)';
+      case 'beginning': return 'Beginning Inventory';
+      default: return 'Transaction';
+    }
+  };
+
   const handleEditItem = (item: InventoryItem) => {
     setSelectedItem(item);
     setIsAddItemDialogOpen(true);
@@ -204,6 +327,11 @@ const Inventory = () => {
   const handleDeleteItem = (id: string) => {
     setItems(items.filter(item => item.id !== id));
     toast.success('Item deleted successfully');
+  };
+  
+  const openTransactionForm = (type: TransactionType) => {
+    setTransactionFormType(type);
+    setIsTransactionSheetOpen(true);
   };
 
   return (
@@ -231,6 +359,29 @@ const Inventory = () => {
             Add Item
           </Button>
         </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-4">
+        <Button variant="outline" onClick={() => openTransactionForm('sale')}>
+          <ArrowUp className="mr-2 h-4 w-4" />
+          New Sale
+        </Button>
+        <Button variant="outline" onClick={() => openTransactionForm('purchase')}>
+          <Truck className="mr-2 h-4 w-4" />
+          New Purchase
+        </Button>
+        <Button variant="outline" onClick={() => openTransactionForm('adjustment_in')}>
+          <ArrowDown className="mr-2 h-4 w-4" />
+          Adjust In
+        </Button>
+        <Button variant="outline" onClick={() => openTransactionForm('adjustment_out')}>
+          <ArrowUp className="mr-2 h-4 w-4" />
+          Adjust Out
+        </Button>
+        <Button variant="outline" onClick={() => openTransactionForm('beginning')}>
+          <ClipboardList className="mr-2 h-4 w-4" />
+          Beginning Qty
+        </Button>
       </div>
 
       <Tabs defaultValue="items" className="w-full">
@@ -594,6 +745,188 @@ const Inventory = () => {
           </form>
         </DialogContent>
       </Dialog>
+      
+      {/* Transaction Forms Sheet */}
+      <Sheet open={isTransactionSheetOpen} onOpenChange={setIsTransactionSheetOpen}>
+        <SheetContent className="sm:max-w-[500px] overflow-y-auto">
+          <form onSubmit={handleDetailedTransaction}>
+            <SheetHeader>
+              <SheetTitle>{getTransactionTypeName(transactionFormType)}</SheetTitle>
+              <SheetDescription>
+                {transactionFormType === 'sale' && 'Record a sale transaction'}
+                {transactionFormType === 'purchase' && 'Record a purchase from supplier'}
+                {transactionFormType === 'adjustment_in' && 'Manually increase inventory'}
+                {transactionFormType === 'adjustment_out' && 'Manually decrease inventory'}
+                {transactionFormType === 'beginning' && 'Set opening stock level'}
+              </SheetDescription>
+            </SheetHeader>
+            
+            <div className="grid gap-4 py-4">
+              {/* Common fields */}
+              <div className="space-y-2">
+                <Label htmlFor="date">Date</Label>
+                <Input
+                  id="date"
+                  name="date"
+                  type="date"
+                  defaultValue={new Date().toISOString().split('T')[0]}
+                  required
+                />
+              </div>
+
+              {/* Product selection - common to all forms */}
+              <div className="space-y-2">
+                <Label htmlFor="itemId">Product</Label>
+                <Select name="itemId" required>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select product" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {items.map(item => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {item.name} ({item.sku}) - Current: {item.quantity}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="quantity">Quantity</Label>
+                <Input
+                  id="quantity"
+                  name="quantity"
+                  type="number"
+                  min="1"
+                  defaultValue="1"
+                  required
+                />
+              </div>
+              
+              {/* Form-specific fields */}
+              {(transactionFormType === 'sale' || transactionFormType === 'purchase') && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="price">
+                      {transactionFormType === 'sale' ? 'Selling Price ($)' : 'Purchase Price ($)'}
+                    </Label>
+                    <Input
+                      id="price"
+                      name="price"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      required
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="party">
+                      {transactionFormType === 'sale' ? 'Customer Name' : 'Supplier Name'}
+                    </Label>
+                    <Input
+                      id="party"
+                      name="party"
+                      required
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="paymentStatus">
+                      Payment {transactionFormType === 'sale' ? 'Method' : 'Status'}
+                    </Label>
+                    <Select name="paymentStatus" defaultValue={transactionFormType === 'sale' ? 'cash' : 'paid'}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {transactionFormType === 'sale' ? (
+                          <>
+                            <SelectItem value="cash">Cash</SelectItem>
+                            <SelectItem value="card">Card</SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                          </>
+                        ) : (
+                          <>
+                            <SelectItem value="paid">Paid</SelectItem>
+                            <SelectItem value="pending">Pending</SelectItem>
+                            <SelectItem value="partial">Partial</SelectItem>
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
+              
+              {transactionFormType === 'beginning' && (
+                <div className="space-y-2">
+                  <Label htmlFor="cost">Cost Per Unit ($)</Label>
+                  <Input
+                    id="cost"
+                    name="cost"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                  />
+                </div>
+              )}
+
+              {(transactionFormType === 'adjustment_in' || transactionFormType === 'adjustment_out') && (
+                <div className="space-y-2">
+                  <Label htmlFor="reason">Reason</Label>
+                  <Select name="reason" required>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select reason" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {transactionFormType === 'adjustment_in' ? (
+                        <>
+                          <SelectItem value="found">Found Items</SelectItem>
+                          <SelectItem value="returned">Customer Return</SelectItem>
+                          <SelectItem value="correction">Inventory Count Correction</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </>
+                      ) : (
+                        <>
+                          <SelectItem value="damaged">Damaged/Expired</SelectItem>
+                          <SelectItem value="lost">Lost/Stolen</SelectItem>
+                          <SelectItem value="correction">Inventory Count Correction</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              
+              <div className="space-y-2">
+                <Label htmlFor="notes">Remarks</Label>
+                <Textarea
+                  id="notes"
+                  name="notes"
+                  placeholder="Additional details about this transaction"
+                  className="min-h-[80px]"
+                />
+              </div>
+            </div>
+            
+            <div className="flex flex-col-reverse sm:flex-row mt-6 gap-3 justify-end">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setIsTransactionSheetOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit">
+                Save {getTransactionTypeName(transactionFormType)}
+              </Button>
+            </div>
+          </form>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 };
