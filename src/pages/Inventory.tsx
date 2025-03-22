@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { 
@@ -859,7 +858,7 @@ const Inventory = () => {
         </DialogContent>
       </Dialog>
       
-      {/* ERP-Style Transaction Sheet with Multi-Item Support */}
+      {/* ERP-Style Transaction Sheet with Table Interface */}
       <Sheet open={isTransactionSheetOpen} onOpenChange={setIsTransactionSheetOpen}>
         <SheetContent className="w-full sm:max-w-[900px] p-0 overflow-hidden">
           <div className="h-full flex flex-col">
@@ -874,279 +873,253 @@ const Inventory = () => {
               </SheetDescription>
             </SheetHeader>
             
-            <ResizablePanelGroup direction="vertical" className="flex-grow">
-              {/* Top section - Transaction details */}
-              <ResizablePanel defaultSize={25} minSize={15}>
-                <div className="p-4 border-b">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-4 border-b">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="date">Date</Label>
+                  <Input
+                    id="date"
+                    type="date"
+                    value={transactionDate}
+                    onChange={(e) => setTransactionDate(e.target.value)}
+                    required
+                  />
+                </div>
+                
+                {(transactionFormType === 'sale' || transactionFormType === 'purchase') && (
+                  <>
                     <div className="space-y-2">
-                      <Label htmlFor="date">Date</Label>
+                      <Label htmlFor="customerSupplier">
+                        {transactionFormType === 'sale' ? 'Customer' : 'Supplier'}
+                      </Label>
                       <Input
-                        id="date"
-                        type="date"
-                        value={transactionDate}
-                        onChange={(e) => setTransactionDate(e.target.value)}
+                        id="customerSupplier"
+                        value={customerSupplier}
+                        onChange={(e) => setCustomerSupplier(e.target.value)}
+                        placeholder={transactionFormType === 'sale' ? 'Customer name' : 'Supplier name'}
                         required
                       />
                     </div>
-                    
-                    {(transactionFormType === 'sale' || transactionFormType === 'purchase') && (
-                      <>
-                        <div className="space-y-2">
-                          <Label htmlFor="customerSupplier">
-                            {transactionFormType === 'sale' ? 'Customer' : 'Supplier'}
-                          </Label>
-                          <Input
-                            id="customerSupplier"
-                            value={customerSupplier}
-                            onChange={(e) => setCustomerSupplier(e.target.value)}
-                            placeholder={transactionFormType === 'sale' ? 'Customer name' : 'Supplier name'}
-                            required
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="paymentStatus">
-                            {transactionFormType === 'sale' ? 'Payment Method' : 'Payment Status'}
-                          </Label>
-                          <Select value={paymentStatus} onValueChange={setPaymentStatus}>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {transactionFormType === 'sale' ? (
-                                <>
-                                  <SelectItem value="cash">Cash</SelectItem>
-                                  <SelectItem value="card">Card</SelectItem>
-                                  <SelectItem value="other">Other</SelectItem>
-                                </>
-                              ) : (
-                                <>
-                                  <SelectItem value="paid">Paid</SelectItem>
-                                  <SelectItem value="pending">Pending</SelectItem>
-                                  <SelectItem value="partial">Partial</SelectItem>
-                                </>
-                              )}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </>
-                    )}
-                    
-                    {(transactionFormType === 'adjustment_in' || transactionFormType === 'adjustment_out') && (
-                      <div className="space-y-2">
-                        <Label htmlFor="adjustmentReason">Reason</Label>
-                        <Select value={adjustmentReason} onValueChange={setAdjustmentReason} required>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select reason" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {transactionFormType === 'adjustment_in' ? (
-                              <>
-                                <SelectItem value="found">Found Items</SelectItem>
-                                <SelectItem value="returned">Customer Return</SelectItem>
-                                <SelectItem value="correction">Inventory Count Correction</SelectItem>
-                                <SelectItem value="other">Other</SelectItem>
-                              </>
-                            ) : (
-                              <>
-                                <SelectItem value="damaged">Damaged/Expired</SelectItem>
-                                <SelectItem value="lost">Lost/Stolen</SelectItem>
-                                <SelectItem value="correction">Inventory Count Correction</SelectItem>
-                                <SelectItem value="other">Other</SelectItem>
-                              </>
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                    
-                    <div className="space-y-2 md:col-span-3">
-                      <Label htmlFor="notes">Remarks</Label>
-                      <Input
-                        id="notes"
-                        value={transactionNotes}
-                        onChange={(e) => setTransactionNotes(e.target.value)}
-                        placeholder="Additional details about this transaction"
-                      />
+                    <div className="space-y-2">
+                      <Label htmlFor="paymentStatus">
+                        {transactionFormType === 'sale' ? 'Payment Method' : 'Payment Status'}
+                      </Label>
+                      <Select value={paymentStatus} onValueChange={setPaymentStatus}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {transactionFormType === 'sale' ? (
+                            <>
+                              <SelectItem value="cash">Cash</SelectItem>
+                              <SelectItem value="card">Card</SelectItem>
+                              <SelectItem value="other">Other</SelectItem>
+                            </>
+                          ) : (
+                            <>
+                              <SelectItem value="paid">Paid</SelectItem>
+                              <SelectItem value="pending">Pending</SelectItem>
+                              <SelectItem value="partial">Partial</SelectItem>
+                            </>
+                          )}
+                        </SelectContent>
+                      </Select>
                     </div>
-                  </div>
-                </div>
-              </ResizablePanel>
-              
-              <ResizableHandle />
-              
-              {/* Middle section - Item selection */}
-              <ResizablePanel defaultSize={35} minSize={20}>
-                <div className="p-4 border-b">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-medium">Add Items</h3>
-                      <div className="relative flex-grow max-w-md mx-2">
-                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
-                        <Input
-                          placeholder="Search inventory items..."
-                          className="pl-9"
-                          value={itemSearchTerm}
-                          onChange={(e) => setItemSearchTerm(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    
-                    <ScrollArea className="h-[140px] border rounded-md">
-                      <div className="p-2">
-                        {filteredLineItems.length === 0 ? (
-                          <div className="flex items-center justify-center h-[100px] text-muted-foreground">
-                            {itemSearchTerm ? 'No matching items found' : 'Search for items to add'}
-                          </div>
+                  </>
+                )}
+                
+                {(transactionFormType === 'adjustment_in' || transactionFormType === 'adjustment_out') && (
+                  <div className="space-y-2">
+                    <Label htmlFor="adjustmentReason">Reason</Label>
+                    <Select value={adjustmentReason} onValueChange={setAdjustmentReason} required>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select reason" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {transactionFormType === 'adjustment_in' ? (
+                          <>
+                            <SelectItem value="found">Found Items</SelectItem>
+                            <SelectItem value="returned">Customer Return</SelectItem>
+                            <SelectItem value="correction">Inventory Count Correction</SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                          </>
                         ) : (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                            {filteredLineItems.map((item) => (
-                              <div 
-                                key={item.id}
-                                className="flex items-center justify-between p-2 border rounded cursor-pointer hover:bg-muted"
-                                onClick={() => handleAddLineItem(item)}
-                              >
-                                <div className="flex items-center">
-                                  <div className="w-6 h-6 rounded overflow-hidden border mr-2">
-                                    <img src={item.imageSrc || 'https://placehold.co/100x100'} alt={item.name} className="w-full h-full object-cover" />
-                                  </div>
-                                  <div>
-                                    <p className="text-sm font-medium">{item.name}</p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {transactionFormType === 'sale' ? 
-                                        `$${item.price.toFixed(2)} · In stock: ${item.quantity}` : 
-                                        `$${item.cost.toFixed(2)} · SKU: ${item.sku}`}
-                                    </p>
-                                  </div>
-                                </div>
-                                <Plus className="h-4 w-4 text-muted-foreground" />
+                          <>
+                            <SelectItem value="damaged">Damaged/Expired</SelectItem>
+                            <SelectItem value="lost">Lost/Stolen</SelectItem>
+                            <SelectItem value="correction">Inventory Count Correction</SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                
+                <div className="space-y-2 md:col-span-3">
+                  <Label htmlFor="notes">Remarks</Label>
+                  <Input
+                    id="notes"
+                    value={transactionNotes}
+                    onChange={(e) => setTransactionNotes(e.target.value)}
+                    placeholder="Additional details about this transaction"
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex-grow flex flex-col p-4 overflow-hidden">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-sm font-medium">Line Items</h3>
+                {/* Search box for products */}
+                <div className="relative max-w-sm">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
+                  <Input
+                    placeholder="Search products..."
+                    className="pl-9 w-[300px]"
+                    value={itemSearchTerm}
+                    onChange={(e) => setItemSearchTerm(e.target.value)}
+                  />
+                  {itemSearchTerm && (
+                    <div className="absolute z-10 mt-1 w-full bg-background border rounded-md shadow-lg max-h-60 overflow-auto">
+                      {filteredLineItems.length > 0 ? (
+                        filteredLineItems.map((item) => (
+                          <div
+                            key={item.id}
+                            className="p-2 hover:bg-muted cursor-pointer flex items-center"
+                            onClick={() => {
+                              handleAddLineItem(item);
+                              setItemSearchTerm('');
+                            }}
+                          >
+                            <div className="w-6 h-6 mr-2 border rounded overflow-hidden">
+                              <img src={item.imageSrc || 'https://placehold.co/100x100'} className="w-full h-full object-cover" alt={item.name} />
+                            </div>
+                            <div>
+                              <div className="font-medium">{item.name}</div>
+                              <div className="text-xs text-muted-foreground">
+                                SKU: {item.sku} | Stock: {item.quantity} | ${item.price.toFixed(2)}
                               </div>
-                            ))}
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    </ScrollArea>
-                  </div>
-                </div>
-              </ResizablePanel>
-              
-              <ResizableHandle />
-              
-              {/* Bottom section - Line items grid */}
-              <ResizablePanel defaultSize={40} minSize={25}>
-                <div className="p-4 h-full flex flex-col">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm font-medium">Transaction Items</h3>
-                    <div className="text-sm text-muted-foreground">
-                      {lineItems.length} items
+                        ))
+                      ) : (
+                        <div className="p-2 text-center text-muted-foreground">No products found</div>
+                      )}
                     </div>
-                  </div>
-                  
-                  <div className="flex-grow overflow-hidden border rounded-md">
-                    <div className="flex flex-col h-full">
-                      <div className="border-b bg-muted/50">
-                        <div className="grid grid-cols-12 gap-2 px-4 py-2 text-xs font-medium">
-                          <div className="col-span-5">Item</div>
-                          <div className="col-span-2 text-right">Quantity</div>
-                          <div className="col-span-2 text-right">Price</div>
-                          <div className="col-span-2 text-right">Total</div>
-                          <div className="col-span-1 text-center">Actions</div>
-                        </div>
-                      </div>
-                      
-                      <ScrollArea className="flex-grow">
-                        {lineItems.length === 0 ? (
-                          <div className="flex items-center justify-center h-[140px] text-muted-foreground">
-                            No items added to this transaction
-                          </div>
-                        ) : (
-                          <div>
-                            {lineItems.map((lineItem) => {
-                              const item = items.find(i => i.id === lineItem.itemId);
-                              if (!item) return null;
-                              
-                              return (
-                                <div key={lineItem.id} className="grid grid-cols-12 gap-2 px-4 py-3 border-b items-center text-sm">
-                                  <div className="col-span-5">
-                                    <div className="flex items-center">
-                                      <div className="w-8 h-8 rounded overflow-hidden border mr-2">
-                                        <img src={item.imageSrc || 'https://placehold.co/100x100'} alt={item.name} className="w-full h-full object-cover" />
-                                      </div>
-                                      <div>
-                                        <p className="font-medium">{item.name}</p>
-                                        <p className="text-xs text-muted-foreground">{item.sku}</p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <div className="col-span-2">
-                                    <Input 
-                                      type="number" 
-                                      min="1" 
-                                      value={lineItem.quantity}
-                                      onChange={(e) => handleUpdateLineItemQuantity(lineItem.id, parseInt(e.target.value) || 0)}
-                                      className="text-right"
-                                    />
-                                  </div>
-                                  <div className="col-span-2">
-                                    <Input 
-                                      type="number" 
-                                      step="0.01" 
-                                      min="0" 
-                                      value={lineItem.price}
-                                      onChange={(e) => handleUpdateLineItemPrice(lineItem.id, parseFloat(e.target.value) || 0)}
-                                      className="text-right"
-                                    />
-                                  </div>
-                                  <div className="col-span-2 text-right font-medium">
-                                    ${lineItem.total.toFixed(2)}
-                                  </div>
-                                  <div className="col-span-1 text-center">
-                                    <Button 
-                                      variant="ghost" 
-                                      size="icon" 
-                                      onClick={() => handleRemoveLineItem(lineItem.id)}
-                                    >
-                                      <X className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </ScrollArea>
-                      
-                      <div className="border-t p-4 bg-muted/20">
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <span className="font-medium">Total Amount:</span>
-                          </div>
-                          <div className="text-xl font-bold">
-                            ${getTransactionTotal().toFixed(2)}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="flex justify-end mt-4 space-x-2">
-                    <Button 
-                      variant="outline" 
-                      onClick={() => setIsTransactionSheetOpen(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button 
-                      onClick={handleSaveTransaction}
-                      disabled={lineItems.length === 0}
-                    >
-                      {transactionFormType === 'sale' ? <FileText className="mr-2 h-4 w-4" /> : <FilePlus className="mr-2 h-4 w-4" />}
-                      Save {getTransactionTypeName(transactionFormType)}
-                    </Button>
-                  </div>
+                  )}
                 </div>
-              </ResizablePanel>
-            </ResizablePanelGroup>
+              </div>
+              
+              <div className="border rounded-md flex-grow overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Product</TableHead>
+                      <TableHead className="w-[150px] text-right">Quantity</TableHead>
+                      <TableHead className="w-[150px] text-right">Price</TableHead>
+                      <TableHead className="w-[150px] text-right">Total</TableHead>
+                      <TableHead className="w-[80px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {lineItems.map((lineItem) => {
+                      const item = items.find(i => i.id === lineItem.itemId);
+                      if (!item) return null;
+                      
+                      return (
+                        <TableRow key={lineItem.id}>
+                          <TableCell>
+                            <div className="flex items-center">
+                              <div className="w-8 h-8 rounded border overflow-hidden mr-2">
+                                <img 
+                                  src={item.imageSrc || 'https://placehold.co/100x100'} 
+                                  alt={item.name}
+                                  className="w-full h-full object-cover" 
+                                />
+                              </div>
+                              <div>
+                                <div className="font-medium">{item.name}</div>
+                                <div className="text-xs text-muted-foreground">SKU: {item.sku}</div>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Input
+                              type="number"
+                              min="1"
+                              value={lineItem.quantity}
+                              onChange={(e) => handleUpdateLineItemQuantity(lineItem.id, parseInt(e.target.value) || 0)}
+                              className="w-20 ml-auto text-right"
+                            />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={lineItem.price}
+                              onChange={(e) => handleUpdateLineItemPrice(lineItem.id, parseFloat(e.target.value) || 0)}
+                              className="w-24 ml-auto text-right"
+                            />
+                          </TableCell>
+                          <TableCell className="text-right font-medium">${lineItem.total.toFixed(2)}</TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleRemoveLineItem(lineItem.id)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    
+                    {/* Empty row with "Add Product" button */}
+                    <TableRow>
+                      <TableCell colSpan={5}>
+                        <Button 
+                          variant="ghost" 
+                          className="w-full justify-start text-muted-foreground"
+                          onClick={() => setItemSearchTerm(' ')} // Set to space to trigger the dropdown
+                        >
+                          <Plus className="mr-2 h-4 w-4" />
+                          Add Product
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+              
+              <div className="flex justify-between items-center mt-4 border-t pt-4">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setIsTransactionSheetOpen(false)}
+                >
+                  Cancel
+                </Button>
+                
+                <div className="flex items-center gap-4">
+                  <div className="text-right">
+                    <div className="text-sm text-muted-foreground">Total Amount</div>
+                    <div className="text-xl font-bold">${getTransactionTotal().toFixed(2)}</div>
+                  </div>
+                  <Button 
+                    onClick={handleSaveTransaction}
+                    disabled={lineItems.length === 0}
+                  >
+                    {transactionFormType === 'sale' ? 
+                      <FileText className="mr-2 h-4 w-4" /> : 
+                      <FilePlus className="mr-2 h-4 w-4" />
+                    }
+                    Save Transaction
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
         </SheetContent>
       </Sheet>
