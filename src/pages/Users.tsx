@@ -1,5 +1,4 @@
-
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { 
   Card, 
@@ -33,8 +32,18 @@ import {
   TableCell, 
   TableHead, 
   TableHeader, 
-  TableRow 
+  TableRow,
+  TablePagination
 } from '@/components/ui/table';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import { toast } from 'sonner';
 import { 
   UserPlus, 
@@ -49,13 +58,17 @@ import {
   Boxes, 
   ShoppingCart,
   Search,
-  Grid2X2
+  Grid2X2,
+  ArrowUpDown,
+  ChevronDown
 } from 'lucide-react';
 import { User, Role, Permission } from '@/types';
 import { mockUsers, mockRoles, mockPermissions } from '@/data/mock-data';
 import { cn } from '@/lib/utils';
 
 type TabType = 'users' | 'roles';
+type SortDirection = 'asc' | 'desc' | null;
+type SortKey = 'module' | 'description' | null;
 
 const UsersPage = () => {
   const [activeTab, setActiveTab] = useState<TabType>('users');
@@ -66,18 +79,21 @@ const UsersPage = () => {
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false);
   const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
   const [permissionSearch, setPermissionSearch] = useState('');
-  
-  // User management
+  const [permissionPage, setPermissionPage] = useState(1);
+  const [permissionPageSize, setPermissionPageSize] = useState(10);
+  const [sortKey, setSortKey] = useState<SortKey>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
+
   const handleAddUser = () => {
     setSelectedUser(null);
     setIsUserDialogOpen(true);
   };
-  
+
   const handleEditUser = (user: User) => {
     setSelectedUser(user);
     setIsUserDialogOpen(true);
   };
-  
+
   const handleSaveUser = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     
@@ -95,7 +111,6 @@ const UsersPage = () => {
     }
     
     if (selectedUser) {
-      // Update existing user
       const updatedUsers = users.map(user => 
         user.id === selectedUser.id 
           ? {
@@ -112,7 +127,6 @@ const UsersPage = () => {
       setUsers(updatedUsers);
       toast.success('User updated successfully');
     } else {
-      // Add new user
       const newUser: User = {
         id: Date.now().toString(),
         name,
@@ -129,23 +143,22 @@ const UsersPage = () => {
     
     setIsUserDialogOpen(false);
   };
-  
+
   const handleDeleteUser = (id: string) => {
     setUsers(users.filter(user => user.id !== id));
     toast.success('User deleted successfully');
   };
-  
-  // Role management
+
   const handleAddRole = () => {
     setSelectedRole(null);
     setIsRoleDialogOpen(true);
   };
-  
+
   const handleEditRole = (role: Role) => {
     setSelectedRole(role);
     setIsRoleDialogOpen(true);
   };
-  
+
   const handleSaveRole = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     
@@ -161,7 +174,6 @@ const UsersPage = () => {
     });
     
     if (selectedRole) {
-      // Update existing role
       const updatedRoles = roles.map(role => 
         role.id === selectedRole.id 
           ? {
@@ -176,7 +188,6 @@ const UsersPage = () => {
       
       setRoles(updatedRoles);
       
-      // Update users with this role
       const updatedUsers = users.map(user => {
         if (user.role.id === selectedRole.id) {
           return {
@@ -196,7 +207,6 @@ const UsersPage = () => {
       setUsers(updatedUsers);
       toast.success('Role updated successfully');
     } else {
-      // Add new role
       const newRole: Role = {
         id: Date.now().toString(),
         name,
@@ -212,9 +222,8 @@ const UsersPage = () => {
     
     setIsRoleDialogOpen(false);
   };
-  
+
   const handleDeleteRole = (id: string) => {
-    // Check if any users have this role
     const usersWithRole = users.filter(user => user.role.id === id);
     
     if (usersWithRole.length > 0) {
@@ -225,7 +234,19 @@ const UsersPage = () => {
     setRoles(roles.filter(role => role.id !== id));
     toast.success('Role deleted successfully');
   };
-  
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : sortDirection === 'desc' ? null : 'asc');
+      if (sortDirection === 'desc') {
+        setSortKey(null);
+      }
+    } else {
+      setSortKey(key);
+      setSortDirection('asc');
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex justify-between items-center">
@@ -392,7 +413,6 @@ const UsersPage = () => {
         </TabsContent>
       </Tabs>
 
-      {/* Add/Edit User Dialog */}
       <Dialog open={isUserDialogOpen} onOpenChange={setIsUserDialogOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <form onSubmit={handleSaveUser}>
@@ -487,9 +507,8 @@ const UsersPage = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Add/Edit Role Dialog */}
       <Dialog open={isRoleDialogOpen} onOpenChange={setIsRoleDialogOpen}>
-        <DialogContent className="sm:max-w-[650px]">
+        <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
           <form onSubmit={handleSaveRole}>
             <DialogHeader>
               <DialogTitle>
@@ -529,7 +548,7 @@ const UsersPage = () => {
               <div className="border rounded-md p-4 mt-2">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center">
-                    <Grid2X2 className="h-4 w-4 mr-2" />
+                    <ShieldCheck className="h-4 w-4 mr-2" />
                     <h3 className="font-medium">Permissions</h3>
                   </div>
                   <div className="relative w-64">
@@ -543,10 +562,16 @@ const UsersPage = () => {
                   </div>
                 </div>
                 
-                <PermissionGrid 
+                <PermissionDataTable 
                   permissions={mockPermissions} 
                   selectedPermissions={selectedRole?.permissions || []}
                   searchTerm={permissionSearch}
+                  currentPage={permissionPage}
+                  pageSize={permissionPageSize}
+                  onPageChange={setPermissionPage}
+                  sortKey={sortKey}
+                  sortDirection={sortDirection}
+                  onSort={handleSort}
                 />
               </div>
             </div>
@@ -570,33 +595,62 @@ const UsersPage = () => {
   );
 };
 
-interface PermissionGridProps {
+interface PermissionDataTableProps {
   permissions: Permission[];
   selectedPermissions: Permission[];
   searchTerm: string;
+  currentPage: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
+  sortKey: SortKey;
+  sortDirection: SortDirection;
+  onSort: (key: SortKey) => void;
 }
 
-const PermissionGrid = ({ permissions, selectedPermissions, searchTerm }: PermissionGridProps) => {
-  // Group permissions by module
-  const groupedPermissions = useMemo(() => {
-    const filtered = searchTerm 
+const PermissionDataTable = ({ 
+  permissions, 
+  selectedPermissions, 
+  searchTerm,
+  currentPage,
+  pageSize,
+  onPageChange,
+  sortKey,
+  sortDirection,
+  onSort
+}: PermissionDataTableProps) => {
+  
+  const filteredPermissions = useMemo(() => {
+    let result = searchTerm 
       ? permissions.filter(p => 
           p.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
           p.module.toLowerCase().includes(searchTerm.toLowerCase())
         )
-      : permissions;
-      
-    return filtered.reduce<Record<string, Permission[]>>((acc, permission) => {
-      if (!acc[permission.module]) {
-        acc[permission.module] = [];
-      }
-      acc[permission.module].push(permission);
-      return acc;
-    }, {});
-  }, [permissions, searchTerm]);
+      : [...permissions];
+    
+    if (sortKey && sortDirection) {
+      result = [...result].sort((a, b) => {
+        if (sortKey === 'module') {
+          return sortDirection === 'asc' 
+            ? a.module.localeCompare(b.module) 
+            : b.module.localeCompare(a.module);
+        } else if (sortKey === 'description') {
+          return sortDirection === 'asc' 
+            ? a.description.localeCompare(b.description) 
+            : b.description.localeCompare(a.description);
+        }
+        return 0;
+      });
+    }
+    
+    return result;
+  }, [permissions, searchTerm, sortKey, sortDirection]);
   
-  // If no permissions match the search criteria
-  if (Object.keys(groupedPermissions).length === 0) {
+  const paginatedPermissions = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredPermissions.slice(startIndex, startIndex + pageSize);
+  }, [filteredPermissions, currentPage, pageSize]);
+  
+  if (filteredPermissions.length === 0) {
     return (
       <div className="flex justify-center items-center py-8 text-muted-foreground">
         No permissions found matching "{searchTerm}"
@@ -615,48 +669,76 @@ const PermissionGrid = ({ permissions, selectedPermissions, searchTerm }: Permis
     }
   };
   
-  const getModuleTitle = (module: string) => {
-    switch(module) {
-      case 'packages': return 'Subscription Packages';
-      case 'inventory': return 'Inventory Management';
-      case 'pos': return 'Point of Sale';
-      case 'users': return 'User Management';
-      case 'settings': return 'Settings';
-      default: return module.charAt(0).toUpperCase() + module.slice(1);
-    }
-  };
-  
   return (
-    <div className="space-y-6">
-      {Object.entries(groupedPermissions).map(([module, modulePermissions]) => (
-        <div key={module} className="space-y-2">
-          <div className="flex items-center mb-2">
-            {getModuleIcon(module)}
-            <h4 className="font-medium ml-2">{getModuleTitle(module)}</h4>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-2 ml-6">
-            {modulePermissions.map((permission) => {
-              const isChecked = selectedPermissions.some(p => p.id === permission.id);
-              
-              return (
-                <div key={permission.id} className="flex items-center space-x-2">
+    <div className="space-y-4">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-[50px]">
+              <span className="sr-only">Selection</span>
+            </TableHead>
+            <TableHead className="w-1/4">
+              <button 
+                className="flex items-center gap-1 hover:text-foreground" 
+                onClick={() => onSort('module')}
+              >
+                Module
+                {sortKey === 'module' && (
+                  <ArrowUpDown className={cn(
+                    "ml-1 h-4 w-4", 
+                    sortDirection === 'asc' ? "rotate-0" : "rotate-180"
+                  )} />
+                )}
+              </button>
+            </TableHead>
+            <TableHead>
+              <button 
+                className="flex items-center gap-1 hover:text-foreground" 
+                onClick={() => onSort('description')}
+              >
+                Permission
+                {sortKey === 'description' && (
+                  <ArrowUpDown className={cn(
+                    "ml-1 h-4 w-4", 
+                    sortDirection === 'asc' ? "rotate-0" : "rotate-180"
+                  )} />
+                )}
+              </button>
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {paginatedPermissions.map((permission) => {
+            const isChecked = selectedPermissions.some(p => p.id === permission.id);
+            
+            return (
+              <TableRow key={permission.id}>
+                <TableCell>
                   <Checkbox 
                     id={`permission-${permission.id}`} 
                     name={`permission-${permission.id}`} 
                     defaultChecked={isChecked} 
                   />
-                  <label
-                    htmlFor={`permission-${permission.id}`}
-                    className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                  >
-                    {permission.description}
-                  </label>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    {getModuleIcon(permission.module)}
+                    <span className="capitalize">{permission.module}</span>
+                  </div>
+                </TableCell>
+                <TableCell>{permission.description}</TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+      
+      <TablePagination
+        totalItems={filteredPermissions.length}
+        pageSize={pageSize}
+        currentPage={currentPage}
+        onPageChange={onPageChange}
+      />
     </div>
   );
 };
