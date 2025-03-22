@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { 
   Card, 
@@ -40,7 +41,8 @@ import {
   TableCell, 
   TableHead, 
   TableHeader, 
-  TableRow 
+  TableRow,
+  TablePagination
 } from '@/components/ui/table';
 import { 
   ArrowUpDown, 
@@ -56,13 +58,31 @@ import {
   Calendar,
   Users,
   Truck,
-  ClipboardList
+  ClipboardList,
+  X,
+  FilePlus,
+  FileText
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { InventoryItem, InventoryTransaction, TransactionType } from '@/types';
 import { mockInventoryItems, mockInventoryTransactions } from '@/data/mock-data';
 import { Textarea } from '@/components/ui/textarea';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { 
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle
+} from '@/components/ui/resizable';
+
+// Type for transaction line items
+interface TransactionLineItem {
+  id: string;
+  itemId: string;
+  quantity: number;
+  price: number;
+  total: number;
+}
 
 const Inventory = () => {
   const [items, setItems] = useState<InventoryItem[]>(mockInventoryItems);
@@ -75,11 +95,48 @@ const Inventory = () => {
   const [isTransactionSheetOpen, setIsTransactionSheetOpen] = useState(false);
   const [transactionFormType, setTransactionFormType] = useState<TransactionType>('purchase');
   
+  // For multi-item transactions
+  const [lineItems, setLineItems] = useState<TransactionLineItem[]>([]);
+  const [itemSearchTerm, setItemSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [transactionDate, setTransactionDate] = useState(new Date().toISOString().split('T')[0]);
+  const [customerSupplier, setCustomerSupplier] = useState('');
+  const [paymentStatus, setPaymentStatus] = useState(transactionFormType === 'sale' ? 'cash' : 'paid');
+  const [transactionNotes, setTransactionNotes] = useState('');
+  const [adjustmentReason, setAdjustmentReason] = useState('');
+  
+  // For pagination
+  const pageSize = 10;
+  const totalTransactions = transactions.length;
+  
   const filteredItems = items.filter(item => 
     item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.barcode.includes(searchTerm) ||
     item.sku.toLowerCase().includes(searchTerm.toLowerCase())
   );
+  
+  const filteredLineItems = items.filter(item => 
+    item.name.toLowerCase().includes(itemSearchTerm.toLowerCase()) ||
+    item.barcode.includes(itemSearchTerm) ||
+    item.sku.toLowerCase().includes(itemSearchTerm.toLowerCase())
+  );
+
+  const paginatedTransactions = transactions
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  
+  // Reset line items when transaction sheet is opened
+  useEffect(() => {
+    if (isTransactionSheetOpen) {
+      setLineItems([]);
+      setTransactionDate(new Date().toISOString().split('T')[0]);
+      setCustomerSupplier('');
+      setPaymentStatus(transactionFormType === 'sale' ? 'cash' : 'paid');
+      setTransactionNotes('');
+      setAdjustmentReason('');
+      setItemSearchTerm('');
+    }
+  }, [isTransactionSheetOpen, transactionFormType]);
   
   const handleAddItem = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -198,106 +255,154 @@ const Inventory = () => {
     setIsAdjustDialogOpen(false);
   };
 
-  const handleDetailedTransaction = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  // Add a line item to the transaction
+  const handleAddLineItem = (item: InventoryItem) => {
+    const existingLineItemIndex = lineItems.findIndex(li => li.itemId === item.id);
     
-    const formData = new FormData(event.currentTarget);
-    const itemId = formData.get('itemId') as string;
-    const quantity = parseInt(formData.get('quantity') as string);
-    const notes = formData.get('notes') as string;
-    const date = formData.get('date') as string;
-    const selectedItem = items.find(item => item.id === itemId);
+    if (existingLineItemIndex >= 0) {
+      // Update existing line item
+      const updatedLineItems = [...lineItems];
+      const updatedQuantity = updatedLineItems[existingLineItemIndex].quantity + 1;
+      const price = transactionFormType === 'sale' ? item.price : item.cost;
+      
+      updatedLineItems[existingLineItemIndex] = {
+        ...updatedLineItems[existingLineItemIndex],
+        quantity: updatedQuantity,
+        total: updatedQuantity * price
+      };
+      
+      setLineItems(updatedLineItems);
+    } else {
+      // Add new line item
+      const price = transactionFormType === 'sale' ? item.price : item.cost;
+      const newLineItem: TransactionLineItem = {
+        id: Date.now().toString(),
+        itemId: item.id,
+        quantity: 1,
+        price,
+        total: price
+      };
+      
+      setLineItems([...lineItems, newLineItem]);
+    }
     
-    if (!selectedItem) {
-      toast.error('Please select a valid product');
+    setItemSearchTerm('');
+  };
+
+  // Update line item quantity
+  const handleUpdateLineItemQuantity = (id: string, quantity: number) => {
+    if (quantity <= 0) return;
+    
+    const updatedLineItems = lineItems.map(item => {
+      if (item.id === id) {
+        return {
+          ...item,
+          quantity,
+          total: quantity * item.price
+        };
+      }
+      return item;
+    });
+    
+    setLineItems(updatedLineItems);
+  };
+
+  // Update line item price
+  const handleUpdateLineItemPrice = (id: string, price: number) => {
+    if (price < 0) return;
+    
+    const updatedLineItems = lineItems.map(item => {
+      if (item.id === id) {
+        return {
+          ...item,
+          price,
+          total: item.quantity * price
+        };
+      }
+      return item;
+    });
+    
+    setLineItems(updatedLineItems);
+  };
+
+  // Remove line item
+  const handleRemoveLineItem = (id: string) => {
+    setLineItems(lineItems.filter(item => item.id !== id));
+  };
+
+  // Get transaction totals
+  const getTransactionTotal = () => {
+    return lineItems.reduce((total, item) => total + item.total, 0);
+  };
+
+  // Handle transaction save
+  const handleSaveTransaction = () => {
+    if (lineItems.length === 0) {
+      toast.error('Please add at least one item to the transaction');
       return;
     }
     
-    let totalAmount = 0;
-    let price = 0;
+    // Generate new transactions for each line item
+    const newTransactions: InventoryTransaction[] = [];
+    const updatedItems = [...items];
     
-    // Different logic based on transaction type
-    switch (transactionFormType) {
-      case 'sale':
-        price = parseFloat(formData.get('price') as string) || selectedItem.price;
-        totalAmount = price * quantity;
-        // Reduce inventory
-        setItems(prevItems => 
-          prevItems.map(item => 
-            item.id === itemId 
-              ? { ...item, quantity: item.quantity - quantity, updatedAt: new Date().toISOString() }
-              : item
-          )
-        );
-        break;
+    lineItems.forEach(lineItem => {
+      const item = items.find(i => i.id === lineItem.itemId);
+      if (!item) return;
+      
+      // Update item quantity based on transaction type
+      const itemIndex = updatedItems.findIndex(i => i.id === lineItem.itemId);
+      if (itemIndex >= 0) {
+        let newQuantity = updatedItems[itemIndex].quantity;
         
-      case 'purchase':
-        price = parseFloat(formData.get('price') as string) || selectedItem.cost;
-        totalAmount = price * quantity;
-        // Increase inventory
-        setItems(prevItems => 
-          prevItems.map(item => 
-            item.id === itemId 
-              ? { ...item, quantity: item.quantity + quantity, updatedAt: new Date().toISOString() }
-              : item
-          )
-        );
-        break;
+        switch (transactionFormType) {
+          case 'sale':
+            newQuantity -= lineItem.quantity;
+            break;
+          case 'purchase':
+            newQuantity += lineItem.quantity;
+            break;
+          case 'adjustment_in':
+            newQuantity += lineItem.quantity;
+            break;
+          case 'adjustment_out':
+            newQuantity -= lineItem.quantity;
+            break;
+          case 'beginning':
+            newQuantity = lineItem.quantity;
+            break;
+        }
         
-      case 'adjustment_in':
-        price = selectedItem.cost;
-        totalAmount = price * quantity;
-        // Increase inventory
-        setItems(prevItems => 
-          prevItems.map(item => 
-            item.id === itemId 
-              ? { ...item, quantity: item.quantity + quantity, updatedAt: new Date().toISOString() }
-              : item
-          )
-        );
-        break;
-        
-      case 'adjustment_out':
-        price = selectedItem.cost;
-        totalAmount = price * quantity;
-        // Decrease inventory
-        setItems(prevItems => 
-          prevItems.map(item => 
-            item.id === itemId 
-              ? { ...item, quantity: item.quantity - quantity, updatedAt: new Date().toISOString() }
-              : item
-          )
-        );
-        break;
-        
-      case 'beginning':
-        price = parseFloat(formData.get('cost') as string) || selectedItem.cost;
-        totalAmount = price * quantity;
-        // Set inventory directly
-        setItems(prevItems => 
-          prevItems.map(item => 
-            item.id === itemId 
-              ? { ...item, quantity: quantity, cost: price, updatedAt: new Date().toISOString() }
-              : item
-          )
-        );
-        break;
-    }
+        updatedItems[itemIndex] = {
+          ...updatedItems[itemIndex],
+          quantity: newQuantity,
+          updatedAt: new Date().toISOString()
+        };
+      }
+      
+      // Create transaction record
+      const newTransaction: InventoryTransaction = {
+        id: Date.now().toString() + '-' + lineItem.id,
+        itemId: lineItem.itemId,
+        type: transactionFormType,
+        quantity: lineItem.quantity,
+        price: lineItem.price,
+        totalAmount: lineItem.total,
+        notes: `${transactionNotes || ''} ${transactionFormType === 'sale' || transactionFormType === 'purchase' 
+          ? `${transactionFormType === 'sale' ? 'Customer' : 'Supplier'}: ${customerSupplier}, Payment: ${paymentStatus}` 
+          : transactionFormType === 'adjustment_in' || transactionFormType === 'adjustment_out' 
+            ? `Reason: ${adjustmentReason}` 
+            : ''}`.trim(),
+        createdBy: '1', // Assuming admin user
+        createdAt: transactionDate ? new Date(transactionDate).toISOString() : new Date().toISOString()
+      };
+      
+      newTransactions.push(newTransaction);
+    });
     
-    // Create transaction record
-    const newTransaction: InventoryTransaction = {
-      id: Date.now().toString(),
-      itemId,
-      type: transactionFormType,
-      quantity,
-      price,
-      totalAmount,
-      notes,
-      createdBy: '1', // Assuming admin user
-      createdAt: date ? new Date(date).toISOString() : new Date().toISOString()
-    };
+    setItems(updatedItems);
+    setTransactions([...transactions, ...newTransactions]);
     
-    setTransactions([...transactions, newTransaction]);
     toast.success(`${getTransactionTypeName(transactionFormType)} recorded successfully`);
     setIsTransactionSheetOpen(false);
   };
@@ -512,7 +617,7 @@ const Inventory = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {transactions.map((transaction) => {
+                  {paginatedTransactions.map((transaction) => {
                     const item = items.find(i => i.id === transaction.itemId);
                     
                     if (!item) return null;
@@ -543,6 +648,14 @@ const Inventory = () => {
                   })}
                 </TableBody>
               </Table>
+              <div className="mt-4">
+                <TablePagination
+                  totalItems={totalTransactions}
+                  pageSize={pageSize}
+                  currentPage={currentPage}
+                  onPageChange={setCurrentPage}
+                />
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -746,12 +859,12 @@ const Inventory = () => {
         </DialogContent>
       </Dialog>
       
-      {/* Transaction Forms Sheet */}
+      {/* ERP-Style Transaction Sheet with Multi-Item Support */}
       <Sheet open={isTransactionSheetOpen} onOpenChange={setIsTransactionSheetOpen}>
-        <SheetContent className="sm:max-w-[500px] overflow-y-auto">
-          <form onSubmit={handleDetailedTransaction}>
-            <SheetHeader>
-              <SheetTitle>{getTransactionTypeName(transactionFormType)}</SheetTitle>
+        <SheetContent className="w-full sm:max-w-[900px] p-0 overflow-hidden">
+          <div className="h-full flex flex-col">
+            <SheetHeader className="px-6 py-4 border-b">
+              <SheetTitle className="text-xl">{getTransactionTypeName(transactionFormType)}</SheetTitle>
               <SheetDescription>
                 {transactionFormType === 'sale' && 'Record a sale transaction'}
                 {transactionFormType === 'purchase' && 'Record a purchase from supplier'}
@@ -761,170 +874,280 @@ const Inventory = () => {
               </SheetDescription>
             </SheetHeader>
             
-            <div className="grid gap-4 py-4">
-              {/* Common fields */}
-              <div className="space-y-2">
-                <Label htmlFor="date">Date</Label>
-                <Input
-                  id="date"
-                  name="date"
-                  type="date"
-                  defaultValue={new Date().toISOString().split('T')[0]}
-                  required
-                />
-              </div>
-
-              {/* Product selection - common to all forms */}
-              <div className="space-y-2">
-                <Label htmlFor="itemId">Product</Label>
-                <Select name="itemId" required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select product" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {items.map(item => (
-                      <SelectItem key={item.id} value={item.id}>
-                        {item.name} ({item.sku}) - Current: {item.quantity}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="quantity">Quantity</Label>
-                <Input
-                  id="quantity"
-                  name="quantity"
-                  type="number"
-                  min="1"
-                  defaultValue="1"
-                  required
-                />
-              </div>
-              
-              {/* Form-specific fields */}
-              {(transactionFormType === 'sale' || transactionFormType === 'purchase') && (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="price">
-                      {transactionFormType === 'sale' ? 'Selling Price ($)' : 'Purchase Price ($)'}
-                    </Label>
-                    <Input
-                      id="price"
-                      name="price"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      required
-                    />
+            <ResizablePanelGroup direction="vertical" className="flex-grow">
+              {/* Top section - Transaction details */}
+              <ResizablePanel defaultSize={25} minSize={15}>
+                <div className="p-4 border-b">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="date">Date</Label>
+                      <Input
+                        id="date"
+                        type="date"
+                        value={transactionDate}
+                        onChange={(e) => setTransactionDate(e.target.value)}
+                        required
+                      />
+                    </div>
+                    
+                    {(transactionFormType === 'sale' || transactionFormType === 'purchase') && (
+                      <>
+                        <div className="space-y-2">
+                          <Label htmlFor="customerSupplier">
+                            {transactionFormType === 'sale' ? 'Customer' : 'Supplier'}
+                          </Label>
+                          <Input
+                            id="customerSupplier"
+                            value={customerSupplier}
+                            onChange={(e) => setCustomerSupplier(e.target.value)}
+                            placeholder={transactionFormType === 'sale' ? 'Customer name' : 'Supplier name'}
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="paymentStatus">
+                            {transactionFormType === 'sale' ? 'Payment Method' : 'Payment Status'}
+                          </Label>
+                          <Select value={paymentStatus} onValueChange={setPaymentStatus}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {transactionFormType === 'sale' ? (
+                                <>
+                                  <SelectItem value="cash">Cash</SelectItem>
+                                  <SelectItem value="card">Card</SelectItem>
+                                  <SelectItem value="other">Other</SelectItem>
+                                </>
+                              ) : (
+                                <>
+                                  <SelectItem value="paid">Paid</SelectItem>
+                                  <SelectItem value="pending">Pending</SelectItem>
+                                  <SelectItem value="partial">Partial</SelectItem>
+                                </>
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </>
+                    )}
+                    
+                    {(transactionFormType === 'adjustment_in' || transactionFormType === 'adjustment_out') && (
+                      <div className="space-y-2">
+                        <Label htmlFor="adjustmentReason">Reason</Label>
+                        <Select value={adjustmentReason} onValueChange={setAdjustmentReason} required>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select reason" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {transactionFormType === 'adjustment_in' ? (
+                              <>
+                                <SelectItem value="found">Found Items</SelectItem>
+                                <SelectItem value="returned">Customer Return</SelectItem>
+                                <SelectItem value="correction">Inventory Count Correction</SelectItem>
+                                <SelectItem value="other">Other</SelectItem>
+                              </>
+                            ) : (
+                              <>
+                                <SelectItem value="damaged">Damaged/Expired</SelectItem>
+                                <SelectItem value="lost">Lost/Stolen</SelectItem>
+                                <SelectItem value="correction">Inventory Count Correction</SelectItem>
+                                <SelectItem value="other">Other</SelectItem>
+                              </>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    
+                    <div className="space-y-2 md:col-span-3">
+                      <Label htmlFor="notes">Remarks</Label>
+                      <Input
+                        id="notes"
+                        value={transactionNotes}
+                        onChange={(e) => setTransactionNotes(e.target.value)}
+                        placeholder="Additional details about this transaction"
+                      />
+                    </div>
                   </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="party">
-                      {transactionFormType === 'sale' ? 'Customer Name' : 'Supplier Name'}
-                    </Label>
-                    <Input
-                      id="party"
-                      name="party"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="paymentStatus">
-                      Payment {transactionFormType === 'sale' ? 'Method' : 'Status'}
-                    </Label>
-                    <Select name="paymentStatus" defaultValue={transactionFormType === 'sale' ? 'cash' : 'paid'}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {transactionFormType === 'sale' ? (
-                          <>
-                            <SelectItem value="cash">Cash</SelectItem>
-                            <SelectItem value="card">Card</SelectItem>
-                            <SelectItem value="other">Other</SelectItem>
-                          </>
+                </div>
+              </ResizablePanel>
+              
+              <ResizableHandle />
+              
+              {/* Middle section - Item selection */}
+              <ResizablePanel defaultSize={35} minSize={20}>
+                <div className="p-4 border-b">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-medium">Add Items</h3>
+                      <div className="relative flex-grow max-w-md mx-2">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
+                        <Input
+                          placeholder="Search inventory items..."
+                          className="pl-9"
+                          value={itemSearchTerm}
+                          onChange={(e) => setItemSearchTerm(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    
+                    <ScrollArea className="h-[140px] border rounded-md">
+                      <div className="p-2">
+                        {filteredLineItems.length === 0 ? (
+                          <div className="flex items-center justify-center h-[100px] text-muted-foreground">
+                            {itemSearchTerm ? 'No matching items found' : 'Search for items to add'}
+                          </div>
                         ) : (
-                          <>
-                            <SelectItem value="paid">Paid</SelectItem>
-                            <SelectItem value="pending">Pending</SelectItem>
-                            <SelectItem value="partial">Partial</SelectItem>
-                          </>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                            {filteredLineItems.map((item) => (
+                              <div 
+                                key={item.id}
+                                className="flex items-center justify-between p-2 border rounded cursor-pointer hover:bg-muted"
+                                onClick={() => handleAddLineItem(item)}
+                              >
+                                <div className="flex items-center">
+                                  <div className="w-6 h-6 rounded overflow-hidden border mr-2">
+                                    <img src={item.imageSrc || 'https://placehold.co/100x100'} alt={item.name} className="w-full h-full object-cover" />
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium">{item.name}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {transactionFormType === 'sale' ? 
+                                        `$${item.price.toFixed(2)} · In stock: ${item.quantity}` : 
+                                        `$${item.cost.toFixed(2)} · SKU: ${item.sku}`}
+                                    </p>
+                                  </div>
+                                </div>
+                                <Plus className="h-4 w-4 text-muted-foreground" />
+                              </div>
+                            ))}
+                          </div>
                         )}
-                      </SelectContent>
-                    </Select>
+                      </div>
+                    </ScrollArea>
                   </div>
-                </>
-              )}
-              
-              {transactionFormType === 'beginning' && (
-                <div className="space-y-2">
-                  <Label htmlFor="cost">Cost Per Unit ($)</Label>
-                  <Input
-                    id="cost"
-                    name="cost"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    required
-                  />
                 </div>
-              )}
-
-              {(transactionFormType === 'adjustment_in' || transactionFormType === 'adjustment_out') && (
-                <div className="space-y-2">
-                  <Label htmlFor="reason">Reason</Label>
-                  <Select name="reason" required>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select reason" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {transactionFormType === 'adjustment_in' ? (
-                        <>
-                          <SelectItem value="found">Found Items</SelectItem>
-                          <SelectItem value="returned">Customer Return</SelectItem>
-                          <SelectItem value="correction">Inventory Count Correction</SelectItem>
-                          <SelectItem value="other">Other</SelectItem>
-                        </>
-                      ) : (
-                        <>
-                          <SelectItem value="damaged">Damaged/Expired</SelectItem>
-                          <SelectItem value="lost">Lost/Stolen</SelectItem>
-                          <SelectItem value="correction">Inventory Count Correction</SelectItem>
-                          <SelectItem value="other">Other</SelectItem>
-                        </>
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+              </ResizablePanel>
               
-              <div className="space-y-2">
-                <Label htmlFor="notes">Remarks</Label>
-                <Textarea
-                  id="notes"
-                  name="notes"
-                  placeholder="Additional details about this transaction"
-                  className="min-h-[80px]"
-                />
-              </div>
-            </div>
-            
-            <div className="flex flex-col-reverse sm:flex-row mt-6 gap-3 justify-end">
-              <Button 
-                type="button" 
-                variant="outline" 
-                onClick={() => setIsTransactionSheetOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit">
-                Save {getTransactionTypeName(transactionFormType)}
-              </Button>
-            </div>
-          </form>
+              <ResizableHandle />
+              
+              {/* Bottom section - Line items grid */}
+              <ResizablePanel defaultSize={40} minSize={25}>
+                <div className="p-4 h-full flex flex-col">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-medium">Transaction Items</h3>
+                    <div className="text-sm text-muted-foreground">
+                      {lineItems.length} items
+                    </div>
+                  </div>
+                  
+                  <div className="flex-grow overflow-hidden border rounded-md">
+                    <div className="flex flex-col h-full">
+                      <div className="border-b bg-muted/50">
+                        <div className="grid grid-cols-12 gap-2 px-4 py-2 text-xs font-medium">
+                          <div className="col-span-5">Item</div>
+                          <div className="col-span-2 text-right">Quantity</div>
+                          <div className="col-span-2 text-right">Price</div>
+                          <div className="col-span-2 text-right">Total</div>
+                          <div className="col-span-1 text-center">Actions</div>
+                        </div>
+                      </div>
+                      
+                      <ScrollArea className="flex-grow">
+                        {lineItems.length === 0 ? (
+                          <div className="flex items-center justify-center h-[140px] text-muted-foreground">
+                            No items added to this transaction
+                          </div>
+                        ) : (
+                          <div>
+                            {lineItems.map((lineItem) => {
+                              const item = items.find(i => i.id === lineItem.itemId);
+                              if (!item) return null;
+                              
+                              return (
+                                <div key={lineItem.id} className="grid grid-cols-12 gap-2 px-4 py-3 border-b items-center text-sm">
+                                  <div className="col-span-5">
+                                    <div className="flex items-center">
+                                      <div className="w-8 h-8 rounded overflow-hidden border mr-2">
+                                        <img src={item.imageSrc || 'https://placehold.co/100x100'} alt={item.name} className="w-full h-full object-cover" />
+                                      </div>
+                                      <div>
+                                        <p className="font-medium">{item.name}</p>
+                                        <p className="text-xs text-muted-foreground">{item.sku}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="col-span-2">
+                                    <Input 
+                                      type="number" 
+                                      min="1" 
+                                      value={lineItem.quantity}
+                                      onChange={(e) => handleUpdateLineItemQuantity(lineItem.id, parseInt(e.target.value) || 0)}
+                                      className="text-right"
+                                    />
+                                  </div>
+                                  <div className="col-span-2">
+                                    <Input 
+                                      type="number" 
+                                      step="0.01" 
+                                      min="0" 
+                                      value={lineItem.price}
+                                      onChange={(e) => handleUpdateLineItemPrice(lineItem.id, parseFloat(e.target.value) || 0)}
+                                      className="text-right"
+                                    />
+                                  </div>
+                                  <div className="col-span-2 text-right font-medium">
+                                    ${lineItem.total.toFixed(2)}
+                                  </div>
+                                  <div className="col-span-1 text-center">
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      onClick={() => handleRemoveLineItem(lineItem.id)}
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </ScrollArea>
+                      
+                      <div className="border-t p-4 bg-muted/20">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <span className="font-medium">Total Amount:</span>
+                          </div>
+                          <div className="text-xl font-bold">
+                            ${getTransactionTotal().toFixed(2)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-end mt-4 space-x-2">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setIsTransactionSheetOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      onClick={handleSaveTransaction}
+                      disabled={lineItems.length === 0}
+                    >
+                      {transactionFormType === 'sale' ? <FileText className="mr-2 h-4 w-4" /> : <FilePlus className="mr-2 h-4 w-4" />}
+                      Save {getTransactionTypeName(transactionFormType)}
+                    </Button>
+                  </div>
+                </div>
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          </div>
         </SheetContent>
       </Sheet>
     </div>
