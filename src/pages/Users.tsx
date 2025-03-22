@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { 
   Card, 
@@ -47,7 +47,9 @@ import {
   XCircle, 
   Package, 
   Boxes, 
-  ShoppingCart 
+  ShoppingCart,
+  Search,
+  Grid2X2
 } from 'lucide-react';
 import { User, Role, Permission } from '@/types';
 import { mockUsers, mockRoles, mockPermissions } from '@/data/mock-data';
@@ -63,6 +65,7 @@ const UsersPage = () => {
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false);
   const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
+  const [permissionSearch, setPermissionSearch] = useState('');
   
   // User management
   const handleAddUser = () => {
@@ -486,7 +489,7 @@ const UsersPage = () => {
 
       {/* Add/Edit Role Dialog */}
       <Dialog open={isRoleDialogOpen} onOpenChange={setIsRoleDialogOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[650px]">
           <form onSubmit={handleSaveRole}>
             <DialogHeader>
               <DialogTitle>
@@ -524,44 +527,27 @@ const UsersPage = () => {
               </div>
               
               <div className="border rounded-md p-4 mt-2">
-                <h3 className="font-medium mb-3">Permissions</h3>
-                
-                <div className="space-y-4">
-                  <PermissionGroup
-                    title="Subscription Packages"
-                    icon={<Package className="h-4 w-4" />}
-                    permissions={mockPermissions.filter(p => p.module === 'packages')}
-                    selectedPermissions={selectedRole?.permissions || []}
-                  />
-                  
-                  <PermissionGroup
-                    title="Inventory Management"
-                    icon={<Boxes className="h-4 w-4" />}
-                    permissions={mockPermissions.filter(p => p.module === 'inventory')}
-                    selectedPermissions={selectedRole?.permissions || []}
-                  />
-                  
-                  <PermissionGroup
-                    title="Point of Sale"
-                    icon={<ShoppingCart className="h-4 w-4" />}
-                    permissions={mockPermissions.filter(p => p.module === 'pos')}
-                    selectedPermissions={selectedRole?.permissions || []}
-                  />
-                  
-                  <PermissionGroup
-                    title="User Management"
-                    icon={<Users className="h-4 w-4" />}
-                    permissions={mockPermissions.filter(p => p.module === 'users')}
-                    selectedPermissions={selectedRole?.permissions || []}
-                  />
-                  
-                  <PermissionGroup
-                    title="Settings"
-                    icon={<Settings className="h-4 w-4" />}
-                    permissions={mockPermissions.filter(p => p.module === 'settings')}
-                    selectedPermissions={selectedRole?.permissions || []}
-                  />
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center">
+                    <Grid2X2 className="h-4 w-4 mr-2" />
+                    <h3 className="font-medium">Permissions</h3>
+                  </div>
+                  <div className="relative w-64">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search permissions..."
+                      className="pl-9"
+                      value={permissionSearch}
+                      onChange={(e) => setPermissionSearch(e.target.value)}
+                    />
+                  </div>
                 </div>
+                
+                <PermissionGrid 
+                  permissions={mockPermissions} 
+                  selectedPermissions={selectedRole?.permissions || []}
+                  searchTerm={permissionSearch}
+                />
               </div>
             </div>
             
@@ -584,41 +570,93 @@ const UsersPage = () => {
   );
 };
 
-interface PermissionGroupProps {
-  title: string;
-  icon: React.ReactNode;
+interface PermissionGridProps {
   permissions: Permission[];
   selectedPermissions: Permission[];
+  searchTerm: string;
 }
 
-const PermissionGroup = ({ title, icon, permissions, selectedPermissions }: PermissionGroupProps) => {
+const PermissionGrid = ({ permissions, selectedPermissions, searchTerm }: PermissionGridProps) => {
+  // Group permissions by module
+  const groupedPermissions = useMemo(() => {
+    const filtered = searchTerm 
+      ? permissions.filter(p => 
+          p.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
+          p.module.toLowerCase().includes(searchTerm.toLowerCase())
+        )
+      : permissions;
+      
+    return filtered.reduce<Record<string, Permission[]>>((acc, permission) => {
+      if (!acc[permission.module]) {
+        acc[permission.module] = [];
+      }
+      acc[permission.module].push(permission);
+      return acc;
+    }, {});
+  }, [permissions, searchTerm]);
+  
+  // If no permissions match the search criteria
+  if (Object.keys(groupedPermissions).length === 0) {
+    return (
+      <div className="flex justify-center items-center py-8 text-muted-foreground">
+        No permissions found matching "{searchTerm}"
+      </div>
+    );
+  }
+  
+  const getModuleIcon = (module: string) => {
+    switch(module) {
+      case 'packages': return <Package className="h-4 w-4" />;
+      case 'inventory': return <Boxes className="h-4 w-4" />;
+      case 'pos': return <ShoppingCart className="h-4 w-4" />;
+      case 'users': return <Users className="h-4 w-4" />;
+      case 'settings': return <Settings className="h-4 w-4" />;
+      default: return <ShieldCheck className="h-4 w-4" />;
+    }
+  };
+  
+  const getModuleTitle = (module: string) => {
+    switch(module) {
+      case 'packages': return 'Subscription Packages';
+      case 'inventory': return 'Inventory Management';
+      case 'pos': return 'Point of Sale';
+      case 'users': return 'User Management';
+      case 'settings': return 'Settings';
+      default: return module.charAt(0).toUpperCase() + module.slice(1);
+    }
+  };
+  
   return (
-    <div>
-      <div className="flex items-center mb-2">
-        {icon}
-        <h4 className="font-medium ml-2">{title}</h4>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 ml-6">
-        {permissions.map((permission) => {
-          const isChecked = selectedPermissions.some(p => p.id === permission.id);
-          
-          return (
-            <div key={permission.id} className="flex items-center space-x-2">
-              <Checkbox 
-                id={`permission-${permission.id}`} 
-                name={`permission-${permission.id}`} 
-                defaultChecked={isChecked} 
-              />
-              <label
-                htmlFor={`permission-${permission.id}`}
-                className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                {permission.description}
-              </label>
-            </div>
-          );
-        })}
-      </div>
+    <div className="space-y-6">
+      {Object.entries(groupedPermissions).map(([module, modulePermissions]) => (
+        <div key={module} className="space-y-2">
+          <div className="flex items-center mb-2">
+            {getModuleIcon(module)}
+            <h4 className="font-medium ml-2">{getModuleTitle(module)}</h4>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-2 ml-6">
+            {modulePermissions.map((permission) => {
+              const isChecked = selectedPermissions.some(p => p.id === permission.id);
+              
+              return (
+                <div key={permission.id} className="flex items-center space-x-2">
+                  <Checkbox 
+                    id={`permission-${permission.id}`} 
+                    name={`permission-${permission.id}`} 
+                    defaultChecked={isChecked} 
+                  />
+                  <label
+                    htmlFor={`permission-${permission.id}`}
+                    className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    {permission.description}
+                  </label>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   );
 };
