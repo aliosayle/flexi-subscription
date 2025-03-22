@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { 
@@ -209,7 +208,7 @@ const POS = () => {
               {/* Barcode Scanner */}
               <form onSubmit={handleBarcodeSearch} className="flex gap-2">
                 <div className="relative flex-1">
-                  <BarCode className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Barcode className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
                     ref={barcodeInputRef}
                     placeholder="Scan barcode..."

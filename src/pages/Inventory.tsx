@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { 
@@ -284,7 +283,7 @@ const Inventory = () => {
                             <span className="font-semibold mr-1">SKU:</span> {item.sku}
                           </div>
                           <div className="flex items-center text-xs">
-                            <BarCode className="h-3 w-3 mr-1" />
+                            <Barcode className="h-3 w-3 mr-1" />
                             {item.barcode}
                           </div>
                         </div>
