@@ -52,7 +52,7 @@ import {
   Trash,
   ArrowUp,
   ArrowDown,
-  BarCode,
+  Barcode,
   Package
 } from 'lucide-react';
 import { toast } from 'sonner';

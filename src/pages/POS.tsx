@@ -34,7 +34,7 @@ import {
   Search, 
   Plus, 
   Minus, 
-  BarCode, 
+  Barcode, 
   CreditCard, 
   Banknote, 
   Check, 
