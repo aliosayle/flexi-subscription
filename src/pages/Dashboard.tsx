@@ -1,131 +1,228 @@
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Users, ShoppingCart, Package, DollarSign, TrendingUp, AlertTriangle } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-import React from 'react';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { ArrowUpRight, Package, ShoppingCart, Users, DollarSign, TrendingUp } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { mockSalesChartData, mockMembershipStats, mockInventoryStats, mockPopularProducts, mockPopularPackages } from '@/data/mock-data';
+interface DashboardStats {
+  totalUsers: number;
+  totalSales: number;
+  totalInventory: number;
+  totalRevenue: number;
+}
 
-const Dashboard = () => {
-  return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard 
-          title="Active Members" 
-          value={mockMembershipStats.active} 
-          change={+7.2} 
-          icon={<Users className="w-6 h-6" />} 
-        />
-        <StatCard 
-          title="Monthly Revenue" 
-          value="$24,850" 
-          change={+12.5} 
-          icon={<DollarSign className="w-6 h-6" />} 
-        />
-        <StatCard 
-          title="New Sign-ups" 
-          value={mockMembershipStats.newThisMonth} 
-          change={-3.1} 
-          icon={<TrendingUp className="w-6 h-6" />} 
-        />
-        <StatCard 
-          title="Inventory Value" 
-          value={`$${mockInventoryStats.totalValue.toFixed(2)}`} 
-          change={+4.3} 
-          icon={<ShoppingCart className="w-6 h-6" />} 
-        />
+interface RecentActivity {
+  type: 'sale' | 'inventory';
+  created_at: string;
+  amount: number;
+  payment_method?: string;
+  customer_name?: string;
+  customer_email?: string;
+  transaction_type?: string;
+  item_name?: string;
+  quantity?: number;
+}
+
+interface SalesByMonth {
+  month: string;
+  count: number;
+  total_sales: number;
+}
+
+interface LowStockItem {
+  id: number;
+  name: string;
+  sku: string;
+  quantity: number;
+  price: number;
+  cost: number;
+}
+
+export default function Dashboard() {
+  const { token } = useAuth();
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
+  const [salesByMonth, setSalesByMonth] = useState<SalesByMonth[]>([]);
+  const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const [statsRes, activitiesRes, salesRes, stockRes] = await Promise.all([
+          axios.get('http://localhost:5000/api/dashboard/stats', {
+            headers: { Authorization: `Bearer ${token}` }
+          }),
+          axios.get('http://localhost:5000/api/dashboard/recent-activities', {
+            headers: { Authorization: `Bearer ${token}` }
+          }),
+          axios.get('http://localhost:5000/api/dashboard/sales-by-month', {
+            headers: { Authorization: `Bearer ${token}` }
+          }),
+          axios.get('http://localhost:5000/api/dashboard/low-stock', {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+        ]);
+
+        setStats(statsRes.data);
+        setRecentActivities(activitiesRes.data);
+        setSalesByMonth(salesRes.data);
+        setLowStockItems(stockRes.data);
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+        toast.error('Failed to load dashboard data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, [token]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
-      
-      {/* Sales Chart */}
-      <Card className="shadow-sm backdrop-blur-sm">
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Users</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.totalUsers || 0}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Sales</CardTitle>
+            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.totalSales || 0}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Inventory</CardTitle>
+            <Package className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.totalInventory || 0}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">${stats?.totalRevenue.toFixed(2) || '0.00'}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Sales Overview Chart */}
+      <Card>
         <CardHeader>
-          <CardTitle>Revenue Overview</CardTitle>
-          <CardDescription>Monthly revenue for the current year</CardDescription>
+          <CardTitle>Sales Overview</CardTitle>
         </CardHeader>
-        <CardContent className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={mockSalesChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="month" axisLine={false} tickLine={false} />
-              <YAxis 
-                axisLine={false} 
-                tickLine={false}
-                tickFormatter={(value) => `$${value}`}
-              />
-              <Tooltip 
-                formatter={(value) => [`$${value}`, 'Revenue']}
-                contentStyle={{ 
-                  borderRadius: '8px', 
-                  backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
-                  border: 'none'
-                }}
-              />
-              <Bar 
-                dataKey="sales" 
-                fill="hsl(var(--primary))" 
-                radius={[4, 4, 0, 0]} 
-                barSize={30}
-                animationDuration={1500}
-              />
-            </BarChart>
-          </ResponsiveContainer>
+        <CardContent>
+          <div className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={salesByMonth}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip />
+                <Line type="monotone" dataKey="total_sales" stroke="#8884d8" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </CardContent>
       </Card>
-      
-      {/* Two Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Popular Products */}
-        <Card className="shadow-sm backdrop-blur-sm">
+
+      {/* Recent Activities and Low Stock Items */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
           <CardHeader>
-            <CardTitle>Popular Products</CardTitle>
-            <CardDescription>Top selling items this month</CardDescription>
+            <CardTitle>Recent Activities</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {mockPopularProducts.map((product, index) => (
-                <div key={product.id} className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <div className="w-8 h-8 bg-muted rounded-md flex items-center justify-center mr-3">
-                      {index + 1}
+              <h2 className="text-lg font-semibold">Recent Activities</h2>
+              <div className="space-y-4">
+                {recentActivities.map((activity) => (
+                  <div key={`${activity.type}-${activity.created_at}`} className="flex items-center justify-between p-4 bg-white rounded-lg shadow">
+                    <div className="flex items-center space-x-4">
+                      <div className={`p-2 rounded-full ${
+                        activity.type === 'sale' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'
+                      }`}>
+                        {activity.type === 'sale' ? (
+                          <ShoppingCart className="w-5 h-5" />
+                        ) : (
+                          <Package className="w-5 h-5" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-medium">
+                          {activity.type === 'sale' ? (
+                            `Sale to ${activity.customer_name || 'Customer'}`
+                          ) : (
+                            `${activity.transaction_type === 'purchase' ? 'Purchase' : 'Sale'} of ${activity.item_name}`
+                          )}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {new Date(activity.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium">{product.name}</p>
-                      <p className="text-sm text-muted-foreground">{product.sales} units sold</p>
+                    <div className="text-right">
+                      <p className="font-medium">
+                        ${Number(activity.amount).toFixed(2)}
+                      </p>
+                      {activity.type === 'inventory' && (
+                        <p className="text-sm text-gray-500">
+                          {activity.quantity} units
+                        </p>
+                      )}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-medium">${product.revenue.toFixed(2)}</p>
-                    <p className="text-xs text-muted-foreground">Revenue</p>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </CardContent>
         </Card>
-        
-        {/* Popular Packages */}
-        <Card className="shadow-sm backdrop-blur-sm">
+
+        <Card>
           <CardHeader>
-            <CardTitle>Popular Packages</CardTitle>
-            <CardDescription>Most purchased subscriptions</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-yellow-500" />
+              Low Stock Items
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {mockPopularPackages.map((pkg, index) => (
-                <div key={pkg.id} className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <div className="w-8 h-8 bg-muted rounded-md flex items-center justify-center mr-3">
-                      {index + 1}
-                    </div>
-                    <div>
-                      <p className="font-medium">{pkg.name}</p>
-                      <p className="text-sm text-muted-foreground">{pkg.sales} subscriptions</p>
-                    </div>
-                  </div>
+              {lowStockItems.map((item) => (
+                <div key={item.id} className="flex items-center justify-between">
                   <div>
-                    <Package className="h-5 w-5 text-muted-foreground" />
+                    <p className="font-medium">{item.name}</p>
+                    <p className="text-sm text-muted-foreground">SKU: {item.sku}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-medium">Qty: {item.quantity}</p>
+                    <p className="text-sm text-muted-foreground">
+                      ${item.price.toFixed(2)}
+                    </p>
                   </div>
                 </div>
               ))}
@@ -135,51 +232,4 @@ const Dashboard = () => {
       </div>
     </div>
   );
-};
-
-interface StatCardProps {
-  title: string;
-  value: string | number;
-  change: number;
-  icon: React.ReactNode;
 }
-
-const StatCard = ({ title, value, change, icon }: StatCardProps) => {
-  const isPositive = change >= 0;
-  
-  return (
-    <Card className="shadow-sm group hover:shadow-md transition-shadow duration-300">
-      <CardContent className="p-6">
-        <div className="flex justify-between items-start">
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-muted-foreground">{title}</p>
-            <p className="text-2xl font-bold group-hover:scale-105 transition-transform">{value}</p>
-          </div>
-          <div className={cn(
-            "w-10 h-10 rounded-full flex items-center justify-center",
-            "bg-primary/10 text-primary",
-            "group-hover:scale-110 transition-transform"
-          )}>
-            {icon}
-          </div>
-        </div>
-        
-        <div className="flex items-center mt-4">
-          <div className={cn(
-            "text-sm font-medium flex items-center",
-            isPositive ? "text-green-600" : "text-red-600"
-          )}>
-            <ArrowUpRight className={cn(
-              "h-4 w-4 mr-1",
-              !isPositive && "rotate-180"
-            )} />
-            {Math.abs(change)}%
-          </div>
-          <span className="text-sm text-muted-foreground ml-1">vs last month</span>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-export default Dashboard;

@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { 
   Card, 
@@ -18,6 +17,16 @@ import {
   DialogTitle, 
   DialogTrigger 
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -31,15 +40,43 @@ import {
   TableRow 
 } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Check, Plus, Pencil, Trash2, Package } from 'lucide-react';
+import { Check, Plus, Pencil, Trash2, Package, Loader2 } from 'lucide-react';
 import { SubscriptionPackage } from '@/types';
-import { mockPackages } from '@/data/mock-data';
+import { Link } from "react-router-dom";
 
 const Packages = () => {
-  const [packages, setPackages] = useState<SubscriptionPackage[]>(mockPackages);
+  const [packages, setPackages] = useState<SubscriptionPackage[]>([]);
+  const [loading, setLoading] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<SubscriptionPackage | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [packageToDelete, setPackageToDelete] = useState<string | null>(null);
+
+  // Fetch packages from API
+  const fetchPackages = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('http://localhost:5000/api/packages');
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch packages');
+      }
+      
+      const data = await response.json();
+      setPackages(data);
+    } catch (error) {
+      console.error('Error fetching packages:', error);
+      toast.error('Failed to load packages');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Fetch packages on component mount
+  useEffect(() => {
+    fetchPackages();
+  }, []);
 
   const handleEditPackage = (pkg: SubscriptionPackage) => {
     setSelectedPackage(pkg);
@@ -53,58 +90,112 @@ const Packages = () => {
     setDialogOpen(true);
   };
 
-  const handleSavePackage = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSavePackage = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     
-    const formData = new FormData(event.currentTarget);
-    const name = formData.get('name') as string;
-    const description = formData.get('description') as string;
-    const days = parseInt(formData.get('days') as string);
-    const price = parseFloat(formData.get('price') as string);
-    const featuresText = formData.get('features') as string;
-    const features = featuresText.split('\n').filter(feature => feature.trim() !== '');
-    
-    if (isEditMode && selectedPackage) {
-      // Update existing package
-      const updatedPackages = packages.map(pkg => 
-        pkg.id === selectedPackage.id 
-          ? {
-              ...pkg,
-              name,
-              description,
-              days,
-              price,
-              features,
-              updatedAt: new Date().toISOString()
-            }
-          : pkg
-      );
+    try {
+      setLoading(true);
+      const formData = new FormData(event.currentTarget);
+      const name = formData.get('name') as string;
+      const description = formData.get('description') as string;
+      const days = parseInt(formData.get('days') as string);
+      const price = parseFloat(formData.get('price') as string);
+      const featuresText = formData.get('features') as string;
+      const features = featuresText.split('\n').filter(feature => feature.trim() !== '');
+      const isPopular = selectedPackage?.isPopular || false;
       
-      setPackages(updatedPackages);
-      toast.success('Package updated successfully');
-    } else {
-      // Add new package
-      const newPackage: SubscriptionPackage = {
-        id: Date.now().toString(),
-        name,
-        description,
-        days,
-        price,
-        features,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
+      if (isEditMode && selectedPackage) {
+        // Update existing package
+        const response = await fetch(`http://localhost:5000/api/packages/${selectedPackage.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name,
+            description,
+            days,
+            price,
+            features,
+            isPopular
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to update package');
+        }
+        
+        toast.success('Package updated successfully');
+      } else {
+        // Add new package
+        const response = await fetch('http://localhost:5000/api/packages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name,
+            description,
+            days,
+            price,
+            features,
+            isPopular: false
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to add package');
+        }
+        
+        toast.success('Package added successfully');
+      }
       
-      setPackages([...packages, newPackage]);
-      toast.success('Package added successfully');
+      // Refresh packages list
+      fetchPackages();
+      setDialogOpen(false);
+    } catch (error) {
+      console.error('Error saving package:', error);
+      toast.error(isEditMode ? 'Failed to update package' : 'Failed to add package');
+    } finally {
+      setLoading(false);
     }
-    
-    setDialogOpen(false);
   };
 
-  const handleDeletePackage = (id: string) => {
-    setPackages(packages.filter(pkg => pkg.id !== id));
-    toast.success('Package deleted successfully');
+  const handleDeleteClick = (id: string) => {
+    setPackageToDelete(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!packageToDelete) return;
+    
+    try {
+      setLoading(true);
+      const response = await fetch(`http://localhost:5000/api/packages/${packageToDelete}`, {
+        method: 'DELETE',
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to delete package');
+      }
+      
+      toast.success('Package deleted successfully');
+      
+      // Refresh packages list
+      fetchPackages();
+    } catch (error) {
+      console.error('Error deleting package:', error);
+      toast.error('Failed to delete package');
+    } finally {
+      setLoading(false);
+      setDeleteDialogOpen(false);
+      setPackageToDelete(null);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
+    setPackageToDelete(null);
   };
 
   return (
@@ -114,61 +205,78 @@ const Packages = () => {
           <h2 className="text-3xl font-bold tracking-tight">Subscription Packages</h2>
           <p className="text-muted-foreground">Manage your gym membership packages.</p>
         </div>
-        <Button onClick={handleAddPackage}>
-          <Plus className="mr-2 h-4 w-4" />
+        <Button onClick={handleAddPackage} disabled={loading}>
+          {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
           Add Package
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {packages.map((pkg) => (
-          <PackageCard 
-            key={pkg.id} 
-            package={pkg} 
-            onEdit={() => handleEditPackage(pkg)}
-            onDelete={() => handleDeletePackage(pkg.id)}
-          />
-        ))}
-      </div>
+      {loading && packages.length === 0 ? (
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {packages.map((pkg) => (
+              <PackageCard 
+                key={pkg.id} 
+                package={pkg} 
+                onEdit={() => handleEditPackage(pkg)}
+                onDelete={() => handleDeleteClick(pkg.id)}
+                disabled={loading}
+              />
+            ))}
+          </div>
 
-      <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle>All Packages</CardTitle>
-          <CardDescription>A detailed view of all available subscription packages.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableCaption>A list of all gym subscription packages.</TableCaption>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Duration</TableHead>
-                <TableHead>Price</TableHead>
-                <TableHead>Features</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {packages.map((pkg) => (
-                <TableRow key={pkg.id}>
-                  <TableCell className="font-medium">{pkg.name}</TableCell>
-                  <TableCell>{pkg.days} days</TableCell>
-                  <TableCell>${pkg.price.toFixed(2)}</TableCell>
-                  <TableCell>{pkg.features.length} features</TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => handleEditPackage(pkg)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDeletePackage(pkg.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle>All Packages</CardTitle>
+              <CardDescription>A detailed view of all available subscription packages.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableCaption>A list of all gym subscription packages.</TableCaption>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Duration</TableHead>
+                    <TableHead>Price</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {packages.map((pkg) => (
+                    <TableRow key={pkg.id}>
+                      <TableCell className="font-medium">{pkg.name}</TableCell>
+                      <TableCell>{pkg.days} days</TableCell>
+                      <TableCell>${pkg.price.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => handleEditPackage(pkg)}
+                          disabled={loading}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => handleDeleteClick(pkg.id)}
+                          disabled={loading}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-[500px]">
@@ -253,14 +361,49 @@ const Packages = () => {
             </div>
             
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                Cancel
+              <Button type="submit" disabled={loading}>
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {isEditMode ? 'Updating...' : 'Creating...'}
+                  </>
+                ) : (
+                  'Save'
+                )}
               </Button>
-              <Button type="submit">Save</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the
+              package and remove it from the database.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleDeleteCancel} disabled={loading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteConfirm} 
+              disabled={loading}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
@@ -269,54 +412,44 @@ interface PackageCardProps {
   package: SubscriptionPackage;
   onEdit: () => void;
   onDelete: () => void;
+  disabled?: boolean;
 }
 
-const PackageCard = ({ package: pkg, onEdit, onDelete }: PackageCardProps) => {
+// Display a single package as a card
+const PackageCard = ({ package: pkg, onEdit, onDelete, disabled = false }: PackageCardProps) => {
   return (
-    <Card className={cn(
-      "relative overflow-hidden transition-all duration-300",
-      "hover:shadow-md border-2",
-      pkg.isPopular ? "border-primary" : "border-border"
-    )}>
+    <Card className={cn("relative overflow-hidden", pkg.isPopular && "border-primary")}>
       {pkg.isPopular && (
-        <div className="absolute top-0 right-0 bg-primary text-primary-foreground px-3 py-1 text-xs font-semibold">
+        <div className="absolute top-0 right-0 bg-primary text-primary-foreground px-3 py-1 text-xs font-medium">
           Popular
         </div>
       )}
-      
       <CardHeader>
-        <CardTitle className="flex items-center">
-          <Package className="h-5 w-5 mr-2" />
-          {pkg.name}
-        </CardTitle>
+        <CardTitle>{pkg.name}</CardTitle>
         <CardDescription>{pkg.description}</CardDescription>
       </CardHeader>
-      
       <CardContent>
-        <div className="mb-6">
+        <div className="mb-4">
           <span className="text-3xl font-bold">${pkg.price.toFixed(2)}</span>
-          <span className="text-muted-foreground ml-1">/ {pkg.days} days</span>
+          <span className="text-muted-foreground"> / {pkg.days} days</span>
         </div>
         
         <ul className="space-y-2">
           {pkg.features.map((feature, index) => (
             <li key={index} className="flex items-start">
-              <div className="mr-2 h-5 w-5 flex-shrink-0 rounded-full bg-primary/10 flex items-center justify-center">
-                <Check className="h-3 w-3 text-primary" />
-              </div>
-              <span className="text-sm">{feature}</span>
+              <Check className="h-5 w-5 text-primary mr-2 shrink-0" />
+              <span>{feature}</span>
             </li>
           ))}
         </ul>
       </CardContent>
-      
-      <CardFooter className="flex justify-between border-t pt-4">
-        <Button variant="outline" size="sm" onClick={onEdit}>
-          <Pencil className="mr-2 h-3 w-3" />
+      <CardFooter className="flex justify-end space-x-2">
+        <Button variant="outline" size="sm" onClick={onEdit} disabled={disabled}>
+          <Pencil className="h-4 w-4 mr-1" />
           Edit
         </Button>
-        <Button variant="outline" size="sm" onClick={onDelete}>
-          <Trash2 className="mr-2 h-3 w-3" />
+        <Button variant="destructive" size="sm" onClick={onDelete} disabled={disabled}>
+          <Trash2 className="h-4 w-4 mr-1" />
           Delete
         </Button>
       </CardFooter>
@@ -324,6 +457,7 @@ const PackageCard = ({ package: pkg, onEdit, onDelete }: PackageCardProps) => {
   );
 };
 
+// Utility function for conditional class names
 function cn(...classes: (string | boolean | undefined)[]) {
   return classes.filter(Boolean).join(' ');
 }

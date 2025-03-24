@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -7,32 +6,41 @@ import {
   ShoppingCart, 
   Boxes, 
   Users, 
-  Settings, 
   ChevronLeft, 
   ChevronRight, 
-  BarChart
+  BarChart,
+  UserPlus
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useAuth } from '@/contexts/AuthContext';
 
 type NavItem = {
   name: string;
   path: string;
   icon: React.ElementType;
+  role?: string;
 };
 
 const navItems: NavItem[] = [
-  { name: 'Dashboard', path: '/', icon: BarChart },
-  { name: 'Packages', path: '/packages', icon: Package },
+  { name: 'Dashboard', path: '/', icon: BarChart, role: 'admin' },
+  { name: 'Packages', path: '/packages', icon: Package, role: 'admin' },
+  { name: 'Subscribers', path: '/subscribers', icon: UserPlus },
   { name: 'POS', path: '/pos', icon: ShoppingCart },
-  { name: 'Inventory', path: '/inventory', icon: Boxes },
-  { name: 'Users', path: '/users', icon: Users },
-  { name: 'Settings', path: '/settings', icon: Settings },
+  { name: 'Inventory', path: '/inventory', icon: Boxes, role: 'admin' },
+  { name: 'Users', path: '/users', icon: Users, role: 'admin' },
 ];
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const { user } = useAuth();
+
+  // Filter nav items based on user role
+  const filteredNavItems = navItems.filter(item => {
+    if (!item.role) return true; // Show items without role restriction
+    return user?.role_name === item.role; // Show items only for matching role
+  });
 
   return (
     <aside
@@ -45,7 +53,7 @@ export function Sidebar() {
       <div className="flex items-center justify-between p-4 h-16 border-b border-border">
         {!collapsed && (
           <h1 className="text-xl font-semibold text-sidebar-foreground animate-fade-in">
-            FlexiGym
+            Kinshasa Mall Gym
           </h1>
         )}
         <Button
@@ -67,7 +75,7 @@ export function Sidebar() {
 
       <nav className="flex-1 py-4 overflow-y-auto">
         <ul className="space-y-1 px-2">
-          {navItems.map((item) => {
+          {filteredNavItems.map((item) => {
             const isActive = location.pathname === item.path;
             
             return (
@@ -118,12 +126,12 @@ export function Sidebar() {
       <div className="p-4 border-t border-border mt-auto">
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground">
-            <span className="text-xs font-medium">AD</span>
+            <span className="text-xs font-medium">{user?.role_name?.charAt(0).toUpperCase() || 'U'}</span>
           </div>
           {!collapsed && (
             <div className="ml-3 animate-fade-in">
-              <p className="text-sm font-medium text-sidebar-foreground">Admin User</p>
-              <p className="text-xs text-muted-foreground">admin@flexigym.com</p>
+              <p className="text-sm font-medium text-sidebar-foreground">{user?.name || 'User'}</p>
+              <p className="text-xs text-muted-foreground">{user?.email || 'user@example.com'}</p>
             </div>
           )}
         </div>

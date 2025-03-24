@@ -34,34 +34,54 @@ import {
   Plus, 
   Minus, 
   Barcode, 
-  CreditCard, 
   Banknote, 
   Check, 
   XIcon
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { InventoryItem, CartItem, Sale } from '@/types';
-import { mockInventoryItems } from '@/data/mock-data';
 import { cn } from '@/lib/utils';
+import axios from 'axios';
+import { useAuth } from '@/contexts/AuthContext';
 
 const POS = () => {
-  const [items, setItems] = useState<InventoryItem[]>(mockInventoryItems);
+  const [items, setItems] = useState<InventoryItem[]>([]);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isCheckoutDialogOpen, setIsCheckoutDialogOpen] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card'>('card');
+  const paymentMethod = 'cash';
+  const [loading, setLoading] = useState(false);
+  
+  // Get current user from auth context
+  const { user } = useAuth();
   
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   
   const filteredItems = searchTerm 
     ? items.filter(item => 
         item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.barcode.includes(searchTerm) ||
+        (item.barcode && item.barcode.includes(searchTerm)) ||
         item.sku.toLowerCase().includes(searchTerm.toLowerCase())
       )
     : items;
 
+  // Fetch inventory items on component mount
   useEffect(() => {
+    const fetchItems = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get('http://localhost:5000/api/inventory/items');
+        setItems(response.data);
+      } catch (error) {
+        console.error('Error fetching inventory items:', error);
+        toast.error('Failed to load inventory items');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchItems();
+    
     // Focus on the barcode input when the component mounts
     if (barcodeInputRef.current) {
       barcodeInputRef.current.focus();
@@ -88,9 +108,21 @@ const POS = () => {
   };
 
   const handleAddToCart = (item: InventoryItem) => {
+    // Check if the item has enough quantity in stock
+    if (item.quantity <= 0) {
+      toast.error(`${item.name} is out of stock`);
+      return;
+    }
+    
     const existingCartItem = cartItems.find(cartItem => cartItem.itemId === item.id);
     
     if (existingCartItem) {
+      // Check if adding more would exceed available quantity
+      if (existingCartItem.quantity + 1 > item.quantity) {
+        toast.error(`Not enough ${item.name} in stock`);
+        return;
+      }
+      
       // Update quantity if the item is already in the cart
       setCartItems(cartItems.map(cartItem => 
         cartItem.itemId === item.id 
@@ -119,16 +151,25 @@ const POS = () => {
   };
 
   const handleUpdateQuantity = (id: string, change: number) => {
-    setCartItems(cartItems.map(item => {
-      if (item.id === id) {
-        const newQuantity = Math.max(1, item.quantity + change);
+    setCartItems(cartItems.map(cartItem => {
+      if (cartItem.id === id) {
+        // Find the inventory item to check stock
+        const inventoryItem = items.find(item => item.id === cartItem.itemId);
+        const newQuantity = Math.max(1, cartItem.quantity + change);
+        
+        // Check if updating would exceed available quantity
+        if (change > 0 && inventoryItem && newQuantity > inventoryItem.quantity) {
+          toast.error(`Not enough ${cartItem.name} in stock`);
+          return cartItem;
+        }
+        
         return {
-          ...item,
+          ...cartItem,
           quantity: newQuantity,
-          totalPrice: newQuantity * item.price
+          totalPrice: newQuantity * cartItem.price
         };
       }
-      return item;
+      return cartItem;
     }));
   };
 
@@ -157,39 +198,56 @@ const POS = () => {
     setIsCheckoutDialogOpen(true);
   };
 
-  const handleCompleteCheckout = () => {
-    // Create a new sale
-    const sale: Sale = {
-      id: Date.now().toString(),
-      items: cartItems,
-      subtotal: calculateSubtotal(),
-      tax: calculateTax(),
-      discount: 0,
-      total: calculateTotal(),
-      paymentMethod: paymentMethod,
-      createdBy: '1', // Assuming admin user
-      createdAt: new Date().toISOString()
-    };
-    
-    // Update inventory
-    const updatedItems = items.map(item => {
-      const cartItem = cartItems.find(ci => ci.itemId === item.id);
-      if (cartItem) {
-        return {
-          ...item,
-          quantity: item.quantity - cartItem.quantity
-        };
+  const handleCompleteCheckout = async () => {
+    try {
+      setLoading(true);
+      
+      // Create a new sale
+      const saleData = {
+        items: cartItems.map(item => ({
+          itemId: item.itemId,
+          quantity: item.quantity,
+          price: item.price,
+          totalPrice: item.totalPrice
+        })),
+        subtotal: calculateSubtotal(),
+        tax: calculateTax(),
+        discount: 0,
+        total: calculateTotal(),
+        paymentMethod: paymentMethod,
+        created_by: user?.id || null // Use current user's ID instead of hardcoded value
+      };
+      
+      // Send the sale to the API
+      const response = await axios.post('http://localhost:5000/api/sales', saleData);
+      
+      if (response.data.success) {
+        // Clear cart
+        setCartItems([]);
+        setIsCheckoutDialogOpen(false);
+        
+        // Update local inventory items to reflect the stock changes
+        setItems(items.map(item => {
+          const soldItem = cartItems.find(ci => ci.itemId === item.id);
+          if (soldItem) {
+            return {
+              ...item,
+              quantity: item.quantity - soldItem.quantity
+            };
+          }
+          return item;
+        }));
+        
+        toast.success('Sale completed successfully');
+      } else {
+        toast.error('Failed to complete sale');
       }
-      return item;
-    });
-    
-    setItems(updatedItems);
-    
-    // Clear cart
-    setCartItems([]);
-    setIsCheckoutDialogOpen(false);
-    
-    toast.success('Sale completed successfully');
+    } catch (error) {
+      console.error('Error completing sale:', error);
+      toast.error('Error processing sale');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -235,31 +293,43 @@ const POS = () => {
           
           {/* Product Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-            {filteredItems.map((item) => (
-              <Card 
-                key={item.id} 
-                className={cn(
-                  "cursor-pointer hover:shadow-md transition-all duration-200",
-                  "hover:translate-y-[-2px]"
-                )}
-                onClick={() => handleAddToCart(item)}
-              >
-                <CardContent className="p-3 text-center">
-                  <div className="aspect-square mb-2 bg-muted rounded-md flex items-center justify-center overflow-hidden">
-                    <img 
-                      src={item.imageSrc || 'https://placehold.co/100x100'} 
-                      alt={item.name} 
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="font-medium text-sm truncate">{item.name}</p>
-                    <p className="text-muted-foreground text-xs">{item.sku}</p>
-                    <p className="font-bold">${item.price.toFixed(2)}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+            {loading ? (
+              <div className="col-span-full text-center py-10">
+                <p>Loading inventory items...</p>
+              </div>
+            ) : filteredItems.length === 0 ? (
+              <div className="col-span-full text-center py-10">
+                <p>No products found</p>
+              </div>
+            ) : (
+              filteredItems.map((item) => (
+                <Card 
+                  key={item.id} 
+                  className={cn(
+                    "cursor-pointer hover:shadow-md transition-all duration-200",
+                    "hover:translate-y-[-2px]",
+                    item.quantity <= 0 && "opacity-50"
+                  )}
+                  onClick={() => handleAddToCart(item)}
+                >
+                  <CardContent className="p-3 text-center">
+                    <div className="aspect-square mb-2 bg-muted rounded-md flex items-center justify-center overflow-hidden">
+                      <img 
+                        src={item.imageSrc || 'https://placehold.co/100x100'} 
+                        alt={item.name} 
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="font-medium text-sm truncate">{item.name}</p>
+                      <p className="text-muted-foreground text-xs">{item.sku}</p>
+                      <p className="font-bold">${item.price.toFixed(2)}</p>
+                      <p className="text-xs text-muted-foreground">Stock: {item.quantity}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
           </div>
         </div>
         
@@ -352,7 +422,7 @@ const POS = () => {
               <Button 
                 className="w-full" 
                 size="lg"
-                disabled={cartItems.length === 0}
+                disabled={cartItems.length === 0 || loading}
                 onClick={handleCheckout}
               >
                 <ShoppingCart className="mr-2 h-4 w-4" />
@@ -369,39 +439,15 @@ const POS = () => {
           <DialogHeader>
             <DialogTitle>Complete Sale</DialogTitle>
             <DialogDescription>
-              Finalize the transaction by selecting a payment method.
+              Finalize the transaction for cash payment.
             </DialogDescription>
           </DialogHeader>
           
           <div className="py-4 space-y-4">
-            <div className="space-y-2">
-              <Label>Payment Method</Label>
-              <div className="grid grid-cols-2 gap-4">
-                <Button
-                  type="button"
-                  variant={paymentMethod === 'card' ? 'default' : 'outline'}
-                  className={cn(
-                    "h-24 flex flex-col items-center justify-center",
-                    paymentMethod === 'card' && "ring-2 ring-primary"
-                  )}
-                  onClick={() => setPaymentMethod('card')}
-                >
-                  <CreditCard className="h-8 w-8 mb-2" />
-                  <span>Card Payment</span>
-                </Button>
-                <Button
-                  type="button"
-                  variant={paymentMethod === 'cash' ? 'default' : 'outline'}
-                  className={cn(
-                    "h-24 flex flex-col items-center justify-center",
-                    paymentMethod === 'cash' && "ring-2 ring-primary"
-                  )}
-                  onClick={() => setPaymentMethod('cash')}
-                >
-                  <Banknote className="h-8 w-8 mb-2" />
-                  <span>Cash Payment</span>
-                </Button>
-              </div>
+            {/* Cash payment info */}
+            <div className="flex items-center justify-center p-4 border rounded-lg bg-muted/50">
+              <Banknote className="h-8 w-8 mr-3" />
+              <span className="text-lg font-medium">Cash Payment Only</span>
             </div>
             
             <div className="border rounded-lg p-4 bg-muted/50">
@@ -427,15 +473,23 @@ const POS = () => {
             <Button 
               variant="outline" 
               onClick={() => setIsCheckoutDialogOpen(false)}
+              disabled={loading}
             >
               <XIcon className="h-4 w-4 mr-2" />
               Cancel
             </Button>
             <Button 
               onClick={handleCompleteCheckout}
+              disabled={loading}
             >
-              <Check className="h-4 w-4 mr-2" />
-              Complete Sale
+              {loading ? (
+                <span>Processing...</span>
+              ) : (
+                <>
+                  <Check className="h-4 w-4 mr-2" />
+                  Complete Sale
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

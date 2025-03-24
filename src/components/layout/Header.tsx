@@ -1,10 +1,17 @@
-
 import React from 'react';
 import { useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { Bell, Search } from 'lucide-react';
+import { Bell, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 type PageTitle = {
   [key: string]: string;
@@ -16,12 +23,23 @@ const pageTitles: PageTitle = {
   '/pos': 'Point of Sale',
   '/inventory': 'Inventory Management',
   '/users': 'User Management',
-  '/settings': 'Settings',
 };
 
 export function Header() {
   const location = useLocation();
-  const title = pageTitles[location.pathname] || 'FlexiGym';
+  const { user, logout } = useAuth();
+  const title = pageTitles[location.pathname] || 'Kinshasa Mall Gym';
+  
+  // Get user initials for avatar
+  const getInitials = () => {
+    if (!user?.name) return 'U';
+    return user.name
+      .split(' ')
+      .map(name => name[0])
+      .join('')
+      .toUpperCase()
+      .substring(0, 2);
+  };
 
   return (
     <header className={cn(
@@ -30,15 +48,6 @@ export function Header() {
     )}>
       <div className="flex items-center">
         <h1 className="text-xl font-semibold">{title}</h1>
-        <div className="hidden md:block ml-8">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder="Search..."
-              className="w-[280px] pl-9 bg-muted/40 border-none focus-visible:ring-primary"
-            />
-          </div>
-        </div>
       </div>
 
       <div className="flex items-center space-x-3">
@@ -46,13 +55,28 @@ export function Header() {
           <Bell className="h-5 w-5" />
         </Button>
         <span className="h-6 border-l border-border"></span>
-        <div className="text-sm hidden sm:block">
-          <p className="font-medium">Admin User</p>
-          <p className="text-xs text-muted-foreground">Super Admin</p>
-        </div>
-        <Button variant="ghost" size="sm" className="rounded-full p-0 w-8 h-8">
-          <span className="text-xs font-medium">AD</span>
-        </Button>
+        
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <div className="flex items-center cursor-pointer">
+              <div className="text-sm hidden sm:block mr-2">
+                <p className="font-medium">{user?.name || 'Admin User'}</p>
+                <p className="text-xs text-muted-foreground">{user?.role_name || 'Super Admin'}</p>
+              </div>
+              <Button variant="ghost" size="sm" className="rounded-full p-0 w-8 h-8">
+                <span className="text-xs font-medium">{getInitials()}</span>
+              </Button>
+            </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>My Account</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={logout} className="text-destructive">
+              <LogOut className="h-4 w-4 mr-2" />
+              Logout
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );

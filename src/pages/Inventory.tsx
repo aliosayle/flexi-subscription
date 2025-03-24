@@ -64,7 +64,6 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { InventoryItem, InventoryTransaction, TransactionType } from '@/types';
-import { mockInventoryItems, mockInventoryTransactions } from '@/data/mock-data';
 import { Textarea } from '@/components/ui/textarea';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -84,8 +83,8 @@ interface TransactionLineItem {
 }
 
 const Inventory = () => {
-  const [items, setItems] = useState<InventoryItem[]>(mockInventoryItems);
-  const [transactions, setTransactions] = useState<InventoryTransaction[]>(mockInventoryTransactions);
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [transactions, setTransactions] = useState<InventoryTransaction[]>([]);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [isAddItemDialogOpen, setIsAddItemDialogOpen] = useState(false);
   const [isAdjustDialogOpen, setIsAdjustDialogOpen] = useState(false);
@@ -93,6 +92,8 @@ const Inventory = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isTransactionSheetOpen, setIsTransactionSheetOpen] = useState(false);
   const [transactionFormType, setTransactionFormType] = useState<TransactionType>('purchase');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   // For multi-item transactions
   const [lineItems, setLineItems] = useState<TransactionLineItem[]>([]);
@@ -107,16 +108,66 @@ const Inventory = () => {
   // For pagination
   const pageSize = 10;
   const totalTransactions = transactions.length;
+
+  // Fetch inventory items from API
+  const fetchItems = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const response = await fetch('http://localhost:5000/api/inventory/items');
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch inventory items');
+      }
+      
+      const data = await response.json();
+      setItems(data);
+    } catch (error) {
+      console.error('Error fetching inventory items:', error);
+      setError('Failed to load inventory items');
+      toast.error('Failed to load inventory items');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Fetch transactions from API
+  const fetchTransactions = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const response = await fetch('http://localhost:5000/api/inventory/transactions');
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch transactions');
+      }
+      
+      const data = await response.json();
+      setTransactions(data);
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      setError('Failed to load transactions');
+      toast.error('Failed to load transactions');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Fetch data on component mount
+  useEffect(() => {
+    fetchItems();
+    fetchTransactions();
+  }, []);
   
   const filteredItems = items.filter(item => 
     item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.barcode.includes(searchTerm) ||
+    item.barcode?.includes(searchTerm) ||
     item.sku.toLowerCase().includes(searchTerm.toLowerCase())
   );
   
   const filteredLineItems = items.filter(item => 
     item.name.toLowerCase().includes(itemSearchTerm.toLowerCase()) ||
-    item.barcode.includes(itemSearchTerm) ||
+    item.barcode?.includes(itemSearchTerm) ||
     item.sku.toLowerCase().includes(itemSearchTerm.toLowerCase())
   );
 
@@ -137,44 +188,22 @@ const Inventory = () => {
     }
   }, [isTransactionSheetOpen, transactionFormType]);
   
-  const handleAddItem = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleAddItem = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     
-    const formData = new FormData(event.currentTarget);
-    const name = formData.get('name') as string;
-    const description = formData.get('description') as string;
-    const sku = formData.get('sku') as string;
-    const barcode = formData.get('barcode') as string;
-    const quantity = parseInt(formData.get('quantity') as string);
-    const price = parseFloat(formData.get('price') as string);
-    const cost = parseFloat(formData.get('cost') as string);
-    const category = formData.get('category') as string;
-    
-    if (selectedItem) {
-      // Update existing item
-      const updatedItems = items.map(item => 
-        item.id === selectedItem.id 
-          ? {
-              ...item,
-              name,
-              description,
-              sku,
-              barcode,
-              quantity,
-              price,
-              cost,
-              category,
-              updatedAt: new Date().toISOString()
-            }
-          : item
-      );
+    try {
+      setIsLoading(true);
+      const formData = new FormData(event.currentTarget);
+      const name = formData.get('name') as string;
+      const description = formData.get('description') as string;
+      const sku = formData.get('sku') as string;
+      const barcode = formData.get('barcode') as string;
+      const quantity = parseInt(formData.get('quantity') as string);
+      const price = parseFloat(formData.get('price') as string);
+      const cost = parseFloat(formData.get('cost') as string);
+      const category = formData.get('category') as string;
       
-      setItems(updatedItems);
-      toast.success('Item updated successfully');
-    } else {
-      // Add new item
-      const newItem: InventoryItem = {
-        id: Date.now().toString(),
+      const itemData = {
         name,
         description,
         sku,
@@ -183,134 +212,140 @@ const Inventory = () => {
         price,
         cost,
         category,
-        imageSrc: 'https://placehold.co/100x100',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        imageSrc: 'https://placehold.co/100x100'
       };
       
-      setItems([...items, newItem]);
+      if (selectedItem) {
+        // Update existing item
+        const response = await fetch(`http://localhost:5000/api/inventory/items/${selectedItem.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(itemData)
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to update item');
+        }
+        
+        toast.success('Item updated successfully');
+      } else {
+        // Add new item
+        const response = await fetch('http://localhost:5000/api/inventory/items', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(itemData)
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to add item');
+        }
+        
+        toast.success('Item added successfully');
+      }
       
-      // Create a beginning transaction for the new item
-      const newTransaction: InventoryTransaction = {
-        id: Date.now().toString(),
-        itemId: newItem.id,
-        type: 'beginning',
-        quantity,
-        price: cost,
-        totalAmount: cost * quantity,
-        notes: 'Initial inventory',
-        createdBy: '1', // Assuming admin user
-        createdAt: new Date().toISOString()
-      };
-      
-      setTransactions([...transactions, newTransaction]);
-      toast.success('Item added successfully');
+      // Refresh items list
+      fetchItems();
+      fetchTransactions();
+      setIsAddItemDialogOpen(false);
+    } catch (error) {
+      console.error('Error saving item:', error);
+      toast.error(selectedItem ? 'Failed to update item' : 'Failed to add item');
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsAddItemDialogOpen(false);
   };
 
-  const handleAdjustInventory = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleAdjustInventory = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     
     if (!selectedItem) return;
     
-    const formData = new FormData(event.currentTarget);
-    const quantity = parseInt(formData.get('quantity') as string);
-    const notes = formData.get('notes') as string;
-    
-    // Update the item quantity
-    const updatedItems = items.map(item => {
-      if (item.id === selectedItem.id) {
-        const newQuantity = adjustmentType === 'adjustment_in' 
-          ? item.quantity + quantity
-          : item.quantity - quantity;
-        
-        return {
-          ...item,
-          quantity: newQuantity,
-          updatedAt: new Date().toISOString()
-        };
-      }
-      return item;
-    });
-    
-    setItems(updatedItems);
-    
-    // Create a transaction record
-    const newTransaction: InventoryTransaction = {
-      id: Date.now().toString(),
-      itemId: selectedItem.id,
-      type: adjustmentType,
-      quantity,
-      totalAmount: selectedItem.cost * quantity,
-      notes,
-      createdBy: '1', // Assuming admin user
-      createdAt: new Date().toISOString()
-    };
-    
-    setTransactions([...transactions, newTransaction]);
-    toast.success('Inventory adjusted successfully');
-    setIsAdjustDialogOpen(false);
-  };
-
-  // Add a line item to the transaction
-  const handleAddLineItem = (item: InventoryItem) => {
-    const existingLineItemIndex = lineItems.findIndex(li => li.itemId === item.id);
-    
-    if (existingLineItemIndex >= 0) {
-      // Update existing line item
-      const updatedLineItems = [...lineItems];
-      const updatedQuantity = updatedLineItems[existingLineItemIndex].quantity + 1;
-      const price = transactionFormType === 'sale' ? item.price : item.cost;
+    try {
+      setIsLoading(true);
+      const formData = new FormData(event.currentTarget);
+      const quantity = parseInt(formData.get('quantity') as string);
+      const notes = formData.get('notes') as string;
       
-      updatedLineItems[existingLineItemIndex] = {
-        ...updatedLineItems[existingLineItemIndex],
-        quantity: updatedQuantity,
-        total: updatedQuantity * price
+      const transactionData = {
+        itemId: selectedItem.id,
+        type: adjustmentType,
+        quantity,
+        notes
       };
       
-      setLineItems(updatedLineItems);
+      const response = await fetch('http://localhost:5000/api/inventory/transactions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(transactionData)
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to adjust inventory');
+      }
+      
+      toast.success('Inventory adjusted successfully');
+      
+      // Refresh data
+      fetchItems();
+      fetchTransactions();
+      setIsAdjustDialogOpen(false);
+    } catch (error) {
+      console.error('Error adjusting inventory:', error);
+      toast.error('Failed to adjust inventory');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAddLineItem = (item: InventoryItem) => {
+    // Check if the item is already in the line items
+    const existingItem = lineItems.find(lineItem => lineItem.itemId === item.id);
+    
+    if (existingItem) {
+      // Update the quantity of the existing item
+      handleUpdateLineItemQuantity(existingItem.id, existingItem.quantity + 1);
     } else {
-      // Add new line item
-      const price = transactionFormType === 'sale' ? item.price : item.cost;
+      // Add a new line item
       const newLineItem: TransactionLineItem = {
         id: Date.now().toString(),
         itemId: item.id,
         quantity: 1,
-        price,
-        total: price
+        price: transactionFormType === 'sale' ? item.price : item.cost,
+        total: transactionFormType === 'sale' ? item.price : item.cost
       };
       
       setLineItems([...lineItems, newLineItem]);
     }
     
+    // Clear the search term
     setItemSearchTerm('');
   };
-
-  // Update line item quantity
+  
   const handleUpdateLineItemQuantity = (id: string, quantity: number) => {
     if (quantity <= 0) return;
     
-    const updatedLineItems = lineItems.map(item => {
+    setLineItems(lineItems.map(item => {
       if (item.id === id) {
         return {
           ...item,
           quantity,
-          total: quantity * item.price
+          total: item.price * quantity
         };
       }
       return item;
-    });
-    
-    setLineItems(updatedLineItems);
+    }));
   };
-
-  // Update line item price
+  
   const handleUpdateLineItemPrice = (id: string, price: number) => {
     if (price < 0) return;
     
-    const updatedLineItems = lineItems.map(item => {
+    setLineItems(lineItems.map(item => {
       if (item.id === id) {
         return {
           ...item,
@@ -319,118 +354,134 @@ const Inventory = () => {
         };
       }
       return item;
-    });
-    
-    setLineItems(updatedLineItems);
+    }));
   };
-
-  // Remove line item
+  
   const handleRemoveLineItem = (id: string) => {
     setLineItems(lineItems.filter(item => item.id !== id));
   };
-
-  // Get transaction totals
+  
   const getTransactionTotal = () => {
     return lineItems.reduce((total, item) => total + item.total, 0);
   };
-
-  // Handle transaction save
-  const handleSaveTransaction = () => {
-    if (lineItems.length === 0) {
-      toast.error('Please add at least one item to the transaction');
-      return;
-    }
-    
-    // Generate new transactions for each line item
-    const newTransactions: InventoryTransaction[] = [];
-    const updatedItems = [...items];
-    
-    lineItems.forEach(lineItem => {
-      const item = items.find(i => i.id === lineItem.itemId);
-      if (!item) return;
+  
+  const handleSaveTransaction = async () => {
+    try {
+      setIsLoading(true);
       
-      // Update item quantity based on transaction type
-      const itemIndex = updatedItems.findIndex(i => i.id === lineItem.itemId);
-      if (itemIndex >= 0) {
-        let newQuantity = updatedItems[itemIndex].quantity;
-        
-        switch (transactionFormType) {
-          case 'sale':
-            newQuantity -= lineItem.quantity;
-            break;
-          case 'purchase':
-            newQuantity += lineItem.quantity;
-            break;
-          case 'adjustment_in':
-            newQuantity += lineItem.quantity;
-            break;
-          case 'adjustment_out':
-            newQuantity -= lineItem.quantity;
-            break;
-          case 'beginning':
-            newQuantity = lineItem.quantity;
-            break;
-        }
-        
-        updatedItems[itemIndex] = {
-          ...updatedItems[itemIndex],
-          quantity: newQuantity,
-          updatedAt: new Date().toISOString()
-        };
+      if (lineItems.length === 0) {
+        toast.error('Please add at least one item to the transaction');
+        return;
       }
       
-      // Create transaction record
-      const newTransaction: InventoryTransaction = {
-        id: Date.now().toString() + '-' + lineItem.id,
-        itemId: lineItem.itemId,
-        type: transactionFormType,
-        quantity: lineItem.quantity,
-        price: lineItem.price,
-        totalAmount: lineItem.total,
-        notes: `${transactionNotes || ''} ${transactionFormType === 'sale' || transactionFormType === 'purchase' 
-          ? `${transactionFormType === 'sale' ? 'Customer' : 'Supplier'}: ${customerSupplier}, Payment: ${paymentStatus}` 
-          : transactionFormType === 'adjustment_in' || transactionFormType === 'adjustment_out' 
-            ? `Reason: ${adjustmentReason}` 
-            : ''}`.trim(),
-        createdBy: '1', // Assuming admin user
-        createdAt: transactionDate ? new Date(transactionDate).toISOString() : new Date().toISOString()
-      };
+      // For bulk transactions (purchase/sale)
+      if (transactionFormType === 'purchase' || transactionFormType === 'sale') {
+        const bulkData = {
+          type: transactionFormType,
+          items: lineItems.map(item => ({
+            itemId: item.itemId,
+            quantity: item.quantity,
+            price: item.price
+          })),
+          notes: transactionNotes,
+          customerSupplier,
+          paymentStatus
+        };
+        
+        const response = await fetch('http://localhost:5000/api/inventory/bulk-transactions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(bulkData)
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to create bulk transaction');
+        }
+        
+        toast.success(`${transactionFormType === 'purchase' ? 'Purchase' : 'Sale'} recorded successfully`);
+      } else {
+        // For single-item adjustments
+        const transactionData = {
+          itemId: lineItems[0].itemId,
+          type: transactionFormType,
+          quantity: lineItems[0].quantity,
+          notes: transactionNotes || adjustmentReason
+        };
+        
+        const response = await fetch('http://localhost:5000/api/inventory/transactions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(transactionData)
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to create transaction');
+        }
+        
+        toast.success('Inventory adjusted successfully');
+      }
       
-      newTransactions.push(newTransaction);
-    });
-    
-    setItems(updatedItems);
-    setTransactions([...transactions, ...newTransactions]);
-    
-    toast.success(`${getTransactionTypeName(transactionFormType)} recorded successfully`);
-    setIsTransactionSheetOpen(false);
-  };
-
-  const getTransactionTypeName = (type: TransactionType): string => {
-    switch (type) {
-      case 'purchase': return 'Purchase';
-      case 'sale': return 'Sale';
-      case 'adjustment_in': return 'Adjustment (In)';
-      case 'adjustment_out': return 'Adjustment (Out)';
-      case 'beginning': return 'Beginning Inventory';
-      default: return 'Transaction';
+      // Refresh data
+      fetchItems();
+      fetchTransactions();
+      setIsTransactionSheetOpen(false);
+    } catch (error) {
+      console.error('Error saving transaction:', error);
+      toast.error('Failed to save transaction');
+    } finally {
+      setIsLoading(false);
     }
   };
-
+  
+  const getTransactionTypeName = (type: TransactionType): string => {
+    const types = {
+      purchase: 'Purchase',
+      sale: 'Sale',
+      adjustment_in: 'Adjustment (In)',
+      adjustment_out: 'Adjustment (Out)',
+      beginning: 'Initial Stock'
+    };
+    return types[type] || type;
+  };
+  
   const handleEditItem = (item: InventoryItem) => {
     setSelectedItem(item);
     setIsAddItemDialogOpen(true);
   };
-
+  
   const handleAdjustItem = (item: InventoryItem, type: TransactionType) => {
     setSelectedItem(item);
     setAdjustmentType(type);
     setIsAdjustDialogOpen(true);
   };
-
-  const handleDeleteItem = (id: string) => {
-    setItems(items.filter(item => item.id !== id));
-    toast.success('Item deleted successfully');
+  
+  const handleDeleteItem = async (id: string) => {
+    try {
+      setIsLoading(true);
+      
+      const response = await fetch(`http://localhost:5000/api/inventory/items/${id}`, {
+        method: 'DELETE'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to delete item');
+      }
+      
+      toast.success('Item deleted successfully');
+      
+      // Refresh data
+      fetchItems();
+      fetchTransactions();
+    } catch (error) {
+      console.error('Error deleting item:', error);
+      toast.error('Failed to delete item');
+    } finally {
+      setIsLoading(false);
+    }
   };
   
   const openTransactionForm = (type: TransactionType) => {
