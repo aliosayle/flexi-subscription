@@ -198,32 +198,22 @@ const POS = () => {
     }
     
     try {
-      setLoading(true);
-      
-      // Create the sale
-      const saleResponse = await api.post('/api/sales', {
+      await api.post('/api/sales', {
         items: cartItems.map(item => ({
           itemId: item.itemId,
           quantity: item.quantity,
           price: item.price,
           totalPrice: item.totalPrice
         })),
+        subtotal: calculateSubtotal(),
+        tax: calculateTax(),
+        discount: 0,
         total: calculateTotal(),
         paymentMethod: paymentMethod,
         customer_id: selectedCustomer?.id,
         customer_name: selectedCustomer?.name,
         customer_email: selectedCustomer?.email
       });
-      
-      // If it's a cash payment, record it in the cash drawer
-      if (paymentMethod === 'cash') {
-        await api.post('/api/cash-drawer/transactions', {
-          type: 'sale',
-          amount: calculateTotal(),
-          notes: `Sale ID: ${saleResponse.data.saleId}`
-        });
-      }
-      
       toast.success('Sale completed successfully');
       setCartItems([]);
       setSelectedCustomer(null);
@@ -232,8 +222,6 @@ const POS = () => {
     } catch (error) {
       console.error('Error completing sale:', error);
       toast.error('Failed to complete sale');
-    } finally {
-      setLoading(false);
     }
   };
 
