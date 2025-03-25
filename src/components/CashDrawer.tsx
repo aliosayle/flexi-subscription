@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Plus, Minus, History, DollarSign } from 'lucide-react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface CashTransaction {
   id: number;
@@ -15,9 +16,11 @@ interface CashTransaction {
   amount: number;
   notes: string;
   created_at: string;
+  created_by: string;
 }
 
 export function CashDrawer() {
+  const { token } = useAuth();
   const [balance, setBalance] = useState(0);
   const [transactions, setTransactions] = useState<CashTransaction[]>([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -27,10 +30,19 @@ export function CashDrawer() {
   const [loading, setLoading] = useState(true);
 
   const fetchCashDrawerData = async () => {
+    if (!token) {
+      console.error('No authentication token available');
+      return;
+    }
+
     try {
       const [balanceRes, transactionsRes] = await Promise.all([
-        api.get('/api/cash-drawer/balance'),
-        api.get('/api/cash-drawer/transactions')
+        api.get('/api/cash-drawer/balance', {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        api.get('/api/cash-drawer/transactions', {
+          headers: { Authorization: `Bearer ${token}` }
+        })
       ]);
       setBalance(balanceRes.data.balance);
       setTransactions(transactionsRes.data);
@@ -43,10 +55,17 @@ export function CashDrawer() {
   };
 
   useEffect(() => {
-    fetchCashDrawerData();
-  }, []);
+    if (token) {
+      fetchCashDrawerData();
+    }
+  }, [token]);
 
   const handleTransaction = async (type: 'add' | 'remove' | 'reset') => {
+    if (!token) {
+      toast.error('Authentication required');
+      return;
+    }
+
     try {
       const amountNum = parseFloat(amount);
       if (isNaN(amountNum) || amountNum <= 0) {
@@ -54,11 +73,16 @@ export function CashDrawer() {
         return;
       }
 
-      await api.post('/api/cash-drawer/transactions', {
-        type,
-        amount: amountNum,
-        notes
-      });
+      await api.post('/api/cash-drawer/transactions', 
+        {
+          type,
+          amount: amountNum,
+          notes
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
 
       toast.success(`Successfully ${type}ed money from cash drawer`);
       setIsAddDialogOpen(false);
