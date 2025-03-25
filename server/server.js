@@ -775,7 +775,7 @@ app.get('/api/inventory/transactions', async (req, res) => {
 // Create inventory transaction (adjustment)
 app.post('/api/inventory/transactions', async (req, res) => {
   try {
-    const { itemId, type, quantity, price, notes, customerSupplier, paymentStatus } = req.body;
+    const { itemId, type, quantity, price, notes, customerSupplier, paymentStatus, created_by } = req.body;
     
     // Validate required fields
     if (!itemId || !type || !quantity || quantity <= 0) {
@@ -809,7 +809,7 @@ app.post('/api/inventory/transactions', async (req, res) => {
     // Create transaction
     const [result] = await pool.execute(
       'INSERT INTO inventory_transactions (item_id, type, quantity, price, total_amount, notes, customer_supplier, payment_status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [itemId, type, quantity, transactionPrice, totalAmount, notes || '', customerSupplier || '', paymentStatus || '', 1] // Assuming user id 1 for now
+      [itemId, type, quantity, transactionPrice, totalAmount, notes || '', customerSupplier || '', paymentStatus || '', created_by || null]
     );
     
     // Update item quantity
@@ -847,7 +847,11 @@ app.post('/api/inventory/transactions', async (req, res) => {
     res.status(201).json(newTransaction);
   } catch (error) {
     console.error('Error creating inventory transaction:', error);
-    res.status(500).json({ error: 'Failed to create inventory transaction' });
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message,
+      details: error.stack 
+    });
   }
 });
 
@@ -907,7 +911,7 @@ app.post('/api/inventory/bulk-transactions', async (req, res) => {
         // Create transaction
         const [result] = await connection.execute(
           'INSERT INTO inventory_transactions (item_id, type, quantity, price, total_amount, notes, customer_supplier, payment_status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [itemId, type, quantity, transactionPrice, totalAmount, notes || '', customerSupplier || '', paymentStatus || '', 1] // Assuming user id 1
+          [itemId, type, quantity, transactionPrice, totalAmount, notes || '', customerSupplier || '', paymentStatus || '', 1] // Assuming user id 1 for now
         );
         
         // Update item quantity

@@ -354,6 +354,7 @@ const Inventory = () => {
           itemId: lineItems[0].itemId,
           type: transactionFormType,
           quantity: lineItems[0].quantity,
+          price: lineItems[0].price,
           notes: transactionNotes || adjustmentReason
         };
         
