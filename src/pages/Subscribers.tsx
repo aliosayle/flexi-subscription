@@ -201,9 +201,9 @@ const Subscribers = () => {
       setIsAddDialogOpen(false);
       setIsEditDialogOpen(false);
       fetchData();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving subscriber:', error);
-      toast.error('Failed to save subscriber');
+      toast.error(error.response?.data?.message || 'Failed to save subscriber');
     }
   };
 
