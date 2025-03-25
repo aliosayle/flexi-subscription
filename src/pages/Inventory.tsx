@@ -72,6 +72,7 @@ import {
   ResizablePanel,
   ResizableHandle
 } from '@/components/ui/resizable';
+import api from '@/lib/axios';
 
 // Type for transaction line items
 interface TransactionLineItem {
@@ -112,44 +113,22 @@ const Inventory = () => {
   // Fetch inventory items from API
   const fetchItems = async () => {
     try {
-      setIsLoading(true);
-      setError(null);
-      const response = await fetch('http://localhost:5000/api/inventory/items');
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch inventory items');
-      }
-      
-      const data = await response.json();
-      setItems(data);
+      const response = await api.get('/api/inventory/items');
+      setItems(response.data);
     } catch (error) {
-      console.error('Error fetching inventory items:', error);
-      setError('Failed to load inventory items');
-      toast.error('Failed to load inventory items');
-    } finally {
-      setIsLoading(false);
+      console.error('Error fetching items:', error);
+      toast.error('Failed to fetch items');
     }
   };
 
   // Fetch transactions from API
   const fetchTransactions = async () => {
     try {
-      setIsLoading(true);
-      setError(null);
-      const response = await fetch('http://localhost:5000/api/inventory/transactions');
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch transactions');
-      }
-      
-      const data = await response.json();
-      setTransactions(data);
+      const response = await api.get('/api/inventory/transactions');
+      setTransactions(response.data);
     } catch (error) {
       console.error('Error fetching transactions:', error);
-      setError('Failed to load transactions');
-      toast.error('Failed to load transactions');
-    } finally {
-      setIsLoading(false);
+      toast.error('Failed to fetch transactions');
     }
   };
   
@@ -217,33 +196,11 @@ const Inventory = () => {
       
       if (selectedItem) {
         // Update existing item
-        const response = await fetch(`http://localhost:5000/api/inventory/items/${selectedItem.id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(itemData)
-        });
-        
-        if (!response.ok) {
-          throw new Error('Failed to update item');
-        }
-        
+        await api.put(`/api/inventory/items/${selectedItem.id}`, itemData);
         toast.success('Item updated successfully');
       } else {
         // Add new item
-        const response = await fetch('http://localhost:5000/api/inventory/items', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(itemData)
-        });
-        
-        if (!response.ok) {
-          throw new Error('Failed to add item');
-        }
-        
+        await api.post('/api/inventory/items', itemData);
         toast.success('Item added successfully');
       }
       
@@ -277,17 +234,7 @@ const Inventory = () => {
         notes
       };
       
-      const response = await fetch('http://localhost:5000/api/inventory/transactions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(transactionData)
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to adjust inventory');
-      }
+      await api.post('/api/inventory/transactions', transactionData);
       
       toast.success('Inventory adjusted successfully');
       
@@ -388,17 +335,7 @@ const Inventory = () => {
           paymentStatus
         };
         
-        const response = await fetch('http://localhost:5000/api/inventory/bulk-transactions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(bulkData)
-        });
-        
-        if (!response.ok) {
-          throw new Error('Failed to create bulk transaction');
-        }
+        await api.post('/api/inventory/bulk-transactions', bulkData);
         
         toast.success(`${transactionFormType === 'purchase' ? 'Purchase' : 'Sale'} recorded successfully`);
       } else {
@@ -410,17 +347,7 @@ const Inventory = () => {
           notes: transactionNotes || adjustmentReason
         };
         
-        const response = await fetch('http://localhost:5000/api/inventory/transactions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(transactionData)
-        });
-        
-        if (!response.ok) {
-          throw new Error('Failed to create transaction');
-        }
+        await api.post('/api/inventory/transactions', transactionData);
         
         toast.success('Inventory adjusted successfully');
       }
@@ -461,26 +388,12 @@ const Inventory = () => {
   
   const handleDeleteItem = async (id: string) => {
     try {
-      setIsLoading(true);
-      
-      const response = await fetch(`http://localhost:5000/api/inventory/items/${id}`, {
-        method: 'DELETE'
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to delete item');
-      }
-      
+      await api.delete(`/api/inventory/items/${id}`);
       toast.success('Item deleted successfully');
-      
-      // Refresh data
       fetchItems();
-      fetchTransactions();
     } catch (error) {
       console.error('Error deleting item:', error);
       toast.error('Failed to delete item');
-    } finally {
-      setIsLoading(false);
     }
   };
   

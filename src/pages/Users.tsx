@@ -21,7 +21,8 @@ import {
   DialogDescription, 
   DialogFooter, 
   DialogHeader, 
-  DialogTitle 
+  DialogTitle,
+  DialogTrigger
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -41,7 +42,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
-import axios from 'axios';
+import api from '@/lib/axios';
 import { useAuth } from '@/contexts/AuthContext';
 import { Input } from "@/components/ui/input";
 
@@ -102,20 +103,8 @@ const Users = () => {
     try {
       setLoading(true);
       const [usersRes, rolesRes] = await Promise.all([
-        axios.get<User[]>('http://localhost:5000/api/users', {
-          withCredentials: true,
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          }
-        }),
-        axios.get<Role[]>('http://localhost:5000/api/roles', {
-          withCredentials: true,
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          }
-        })
+        api.get<User[]>('/api/users'),
+        api.get<Role[]>('/api/roles')
       ]);
       
       setUsers(usersRes.data);
@@ -149,18 +138,14 @@ const Users = () => {
     if (!selectedUser?.id) return;
     
     try {
-      await axios.put(`http://localhost:5000/api/users/${selectedUser.id}/role`, {
-        roleId: selectedUser.role_id
-      }, {
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
+      await api.put(`/api/users/${selectedUser.id}/role`, {
+        roleId: selectedRole.id
       });
       
       toast.success('User role updated successfully');
       setIsRoleDialogOpen(false);
+      setSelectedUser(null);
+      setSelectedRole(null);
       fetchData();
     } catch (error) {
       console.error('Error updating user role:', error);
@@ -175,17 +160,11 @@ const Users = () => {
     }
     
     try {
-      const response = await axios.post('http://localhost:5000/api/users', {
+      const response = await api.post('/api/users', {
         name: selectedUser.name,
         email: selectedUser.email,
         password: selectedUser.password,
         role_id: selectedUser.role_id
-      }, {
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
       });
       
       toast.success('User created successfully');
@@ -201,18 +180,14 @@ const Users = () => {
     if (!selectedRole) return;
     
     try {
-      await axios.put(`http://localhost:5000/api/roles/${selectedRole.id}/permissions`, {
+      await api.put(`/api/roles/${selectedRole.id}/permissions`, {
         permissions: selectedPermissions
-      }, {
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
       });
       
       toast.success('Role permissions updated successfully');
       setIsPermissionsDialogOpen(false);
+      setSelectedRole(null);
+      setSelectedPermissions([]);
       fetchData();
     } catch (error) {
       console.error('Error updating role permissions:', error);
@@ -222,18 +197,12 @@ const Users = () => {
   
   const handleDeleteUser = async (userId: string) => {
     try {
-      await axios.delete(`http://localhost:5000/api/users/${userId}`, {
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      await api.delete(`/api/users/${userId}`);
       toast.success('User deleted successfully');
       fetchData();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error deleting user:', error);
-      toast.error(error.response?.data?.error || 'Failed to delete user');
+      toast.error('Failed to delete user');
     }
   };
   

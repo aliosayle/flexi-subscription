@@ -16,7 +16,8 @@ import {
   DialogDescription, 
   DialogFooter, 
   DialogHeader, 
-  DialogTitle 
+  DialogTitle,
+  DialogTrigger
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -41,7 +42,7 @@ import {
 import { toast } from 'sonner';
 import { InventoryItem, CartItem, Sale } from '@/types';
 import { cn } from '@/lib/utils';
-import axios from 'axios';
+import api from '@/lib/axios';
 import { useAuth } from '@/contexts/AuthContext';
 
 const POS = () => {
@@ -51,6 +52,7 @@ const POS = () => {
   const [isCheckoutDialogOpen, setIsCheckoutDialogOpen] = useState(false);
   const paymentMethod = 'cash';
   const [loading, setLoading] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
   
   // Get current user from auth context
   const { user } = useAuth();
@@ -65,21 +67,21 @@ const POS = () => {
       )
     : items;
 
+  const fetchItems = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get('/api/inventory/items');
+      setItems(response.data);
+    } catch (error) {
+      console.error('Error fetching items:', error);
+      toast.error('Failed to fetch items');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Fetch inventory items on component mount
   useEffect(() => {
-    const fetchItems = async () => {
-      try {
-        setLoading(true);
-        const response = await axios.get('http://localhost:5000/api/inventory/items');
-        setItems(response.data);
-      } catch (error) {
-        console.error('Error fetching inventory items:', error);
-        toast.error('Failed to load inventory items');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchItems();
     
     // Focus on the barcode input when the component mounts
@@ -189,21 +191,14 @@ const POS = () => {
     return calculateSubtotal() + calculateTax();
   };
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     if (cartItems.length === 0) {
       toast.error('Cart is empty');
       return;
     }
     
-    setIsCheckoutDialogOpen(true);
-  };
-
-  const handleCompleteCheckout = async () => {
     try {
-      setLoading(true);
-      
-      // Create a new sale
-      const saleData = {
+      await api.post('/api/sales', {
         items: cartItems.map(item => ({
           itemId: item.itemId,
           quantity: item.quantity,
@@ -215,38 +210,18 @@ const POS = () => {
         discount: 0,
         total: calculateTotal(),
         paymentMethod: paymentMethod,
-        created_by: user?.id || null // Use current user's ID instead of hardcoded value
-      };
-      
-      // Send the sale to the API
-      const response = await axios.post('http://localhost:5000/api/sales', saleData);
-      
-      if (response.data.success) {
-        // Clear cart
-        setCartItems([]);
-        setIsCheckoutDialogOpen(false);
-        
-        // Update local inventory items to reflect the stock changes
-        setItems(items.map(item => {
-          const soldItem = cartItems.find(ci => ci.itemId === item.id);
-          if (soldItem) {
-            return {
-              ...item,
-              quantity: item.quantity - soldItem.quantity
-            };
-          }
-          return item;
-        }));
-        
-        toast.success('Sale completed successfully');
-      } else {
-        toast.error('Failed to complete sale');
-      }
+        customer_id: selectedCustomer?.id,
+        customer_name: selectedCustomer?.name,
+        customer_email: selectedCustomer?.email
+      });
+      toast.success('Sale completed successfully');
+      setCartItems([]);
+      setSelectedCustomer(null);
+      setIsCheckoutDialogOpen(false);
+      fetchItems();
     } catch (error) {
       console.error('Error completing sale:', error);
-      toast.error('Error processing sale');
-    } finally {
-      setLoading(false);
+      toast.error('Failed to complete sale');
     }
   };
 
@@ -423,7 +398,7 @@ const POS = () => {
                 className="w-full" 
                 size="lg"
                 disabled={cartItems.length === 0 || loading}
-                onClick={handleCheckout}
+                onClick={() => setIsCheckoutDialogOpen(true)}
               >
                 <ShoppingCart className="mr-2 h-4 w-4" />
                 Checkout
@@ -479,7 +454,7 @@ const POS = () => {
               Cancel
             </Button>
             <Button 
-              onClick={handleCompleteCheckout}
+              onClick={handleCheckout}
               disabled={loading}
             >
               {loading ? (

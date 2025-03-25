@@ -43,6 +43,7 @@ import { toast } from 'sonner';
 import { Check, Plus, Pencil, Trash2, Package, Loader2 } from 'lucide-react';
 import { SubscriptionPackage } from '@/types';
 import { Link } from "react-router-dom";
+import api from '@/lib/axios';
 
 const Packages = () => {
   const [packages, setPackages] = useState<SubscriptionPackage[]>([]);
@@ -52,24 +53,21 @@ const Packages = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [packageToDelete, setPackageToDelete] = useState<string | null>(null);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [days, setDays] = useState('');
+  const [price, setPrice] = useState('');
+  const [features, setFeatures] = useState('');
+  const [isPopular, setIsPopular] = useState(false);
 
   // Fetch packages from API
   const fetchPackages = async () => {
     try {
-      setLoading(true);
-      const response = await fetch('http://localhost:5000/api/packages');
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch packages');
-      }
-      
-      const data = await response.json();
-      setPackages(data);
+      const response = await api.get('/api/packages');
+      setPackages(response.data);
     } catch (error) {
       console.error('Error fetching packages:', error);
-      toast.error('Failed to load packages');
-    } finally {
-      setLoading(false);
+      toast.error('Failed to fetch packages');
     }
   };
   
@@ -90,74 +88,42 @@ const Packages = () => {
     setDialogOpen(true);
   };
 
-  const handleSavePackage = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     try {
-      setLoading(true);
-      const formData = new FormData(event.currentTarget);
-      const name = formData.get('name') as string;
-      const description = formData.get('description') as string;
-      const days = parseInt(formData.get('days') as string);
-      const price = parseFloat(formData.get('price') as string);
-      const featuresText = formData.get('features') as string;
-      const features = featuresText.split('\n').filter(feature => feature.trim() !== '');
-      const isPopular = selectedPackage?.isPopular || false;
-      
-      if (isEditMode && selectedPackage) {
-        // Update existing package
-        const response = await fetch(`http://localhost:5000/api/packages/${selectedPackage.id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            name,
-            description,
-            days,
-            price,
-            features,
-            isPopular
-          })
+      if (selectedPackage) {
+        const response = await api.put(`/api/packages/${selectedPackage.id}`, {
+          name,
+          description,
+          days,
+          price,
+          features: features.split('\n').filter(f => f.trim()),
+          isPopular
         });
-        
-        if (!response.ok) {
-          throw new Error('Failed to update package');
-        }
-        
         toast.success('Package updated successfully');
+        setSelectedPackage(null);
+        fetchPackages();
       } else {
-        // Add new package
-        const response = await fetch('http://localhost:5000/api/packages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            name,
-            description,
-            days,
-            price,
-            features,
-            isPopular: false
-          })
+        const response = await api.post('/api/packages', {
+          name,
+          description,
+          days,
+          price,
+          features: features.split('\n').filter(f => f.trim()),
+          isPopular
         });
-        
-        if (!response.ok) {
-          throw new Error('Failed to add package');
-        }
-        
-        toast.success('Package added successfully');
+        toast.success('Package created successfully');
+        fetchPackages();
       }
-      
-      // Refresh packages list
-      fetchPackages();
-      setDialogOpen(false);
+      setName('');
+      setDescription('');
+      setDays('');
+      setPrice('');
+      setFeatures('');
+      setIsPopular(false);
     } catch (error) {
       console.error('Error saving package:', error);
-      toast.error(isEditMode ? 'Failed to update package' : 'Failed to add package');
-    } finally {
-      setLoading(false);
+      toast.error('Failed to save package');
     }
   };
 
@@ -170,24 +136,13 @@ const Packages = () => {
     if (!packageToDelete) return;
     
     try {
-      setLoading(true);
-      const response = await fetch(`http://localhost:5000/api/packages/${packageToDelete}`, {
-        method: 'DELETE',
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to delete package');
-      }
-      
+      await api.delete(`/api/packages/${packageToDelete}`);
       toast.success('Package deleted successfully');
-      
-      // Refresh packages list
       fetchPackages();
     } catch (error) {
       console.error('Error deleting package:', error);
       toast.error('Failed to delete package');
     } finally {
-      setLoading(false);
       setDeleteDialogOpen(false);
       setPackageToDelete(null);
     }
@@ -280,7 +235,7 @@ const Packages = () => {
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-[500px]">
-          <form onSubmit={handleSavePackage}>
+          <form onSubmit={handleSubmit}>
             <DialogHeader>
               <DialogTitle>{isEditMode ? 'Edit Package' : 'Add New Package'}</DialogTitle>
               <DialogDescription>
@@ -298,7 +253,8 @@ const Packages = () => {
                 <Input
                   id="name"
                   name="name"
-                  defaultValue={selectedPackage?.name || ''}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                   className="col-span-3"
                   required
                 />
@@ -310,7 +266,8 @@ const Packages = () => {
                 <Textarea
                   id="description"
                   name="description"
-                  defaultValue={selectedPackage?.description || ''}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
                   className="col-span-3"
                   required
                 />
@@ -324,7 +281,8 @@ const Packages = () => {
                   name="days"
                   type="number"
                   min="1"
-                  defaultValue={selectedPackage?.days || 30}
+                  value={days}
+                  onChange={(e) => setDays(e.target.value)}
                   className="col-span-3"
                   required
                 />
@@ -339,7 +297,8 @@ const Packages = () => {
                   type="number"
                   step="0.01"
                   min="0"
-                  defaultValue={selectedPackage?.price || 0}
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
                   className="col-span-3"
                   required
                 />
@@ -351,11 +310,22 @@ const Packages = () => {
                 <Textarea
                   id="features"
                   name="features"
+                  value={features}
+                  onChange={(e) => setFeatures(e.target.value)}
                   placeholder="One feature per line"
-                  defaultValue={selectedPackage?.features.join('\n') || ''}
                   className="col-span-3"
                   rows={4}
                   required
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="isPopular" className="text-right">
+                  Popular
+                </Label>
+                <Switch
+                  id="isPopular"
+                  checked={isPopular}
+                  onCheckedChange={(checked) => setIsPopular(checked)}
                 />
               </div>
             </div>

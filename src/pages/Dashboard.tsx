@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, ShoppingCart, Package, DollarSign, TrendingUp, AlertTriangle } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar } from 'recharts';
+import { Users, Package, ShoppingCart, AlertTriangle } from 'lucide-react';
+import api from '@/lib/axios';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface DashboardStats {
   totalUsers: number;
@@ -48,38 +49,30 @@ export default function Dashboard() {
   const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const fetchDashboardData = async () => {
+    try {
+      const [statsRes, activitiesRes, salesRes, lowStockRes] = await Promise.all([
+        api.get('/api/dashboard/stats'),
+        api.get('/api/dashboard/recent-activities'),
+        api.get('/api/dashboard/sales-by-month'),
+        api.get('/api/dashboard/low-stock')
+      ]);
+
+      setStats(statsRes.data);
+      setRecentActivities(activitiesRes.data);
+      setSalesByMonth(salesRes.data);
+      setLowStockItems(lowStockRes.data);
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      toast.error('Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        const [statsRes, activitiesRes, salesRes, stockRes] = await Promise.all([
-          axios.get('http://localhost:5000/api/dashboard/stats', {
-            headers: { Authorization: `Bearer ${token}` }
-          }),
-          axios.get('http://localhost:5000/api/dashboard/recent-activities', {
-            headers: { Authorization: `Bearer ${token}` }
-          }),
-          axios.get('http://localhost:5000/api/dashboard/sales-by-month', {
-            headers: { Authorization: `Bearer ${token}` }
-          }),
-          axios.get('http://localhost:5000/api/dashboard/low-stock', {
-            headers: { Authorization: `Bearer ${token}` }
-          })
-        ]);
-
-        setStats(statsRes.data);
-        setRecentActivities(activitiesRes.data);
-        setSalesByMonth(salesRes.data);
-        setLowStockItems(stockRes.data);
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error);
-        toast.error('Failed to load dashboard data');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchDashboardData();
-  }, [token]);
+  }, []);
 
   if (loading) {
     return (
