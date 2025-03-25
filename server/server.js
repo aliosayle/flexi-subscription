@@ -13,7 +13,6 @@ const { body, validationResult } = require('express-validator');
 const app = express();
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
-const cashDrawerRoutes = require('./routes/cashDrawer');
 
 // Security middleware
 app.use(helmet()); // Adds various HTTP headers for security
@@ -38,24 +37,12 @@ const authLimiter = rateLimit({
   message: 'Too many login attempts, please try again later.'
 });
 
-// CORS configuration with stricter options
+// CORS configuration
 app.use(cors({
-  origin: [
-    'http://localhost:8080',
-    'http://192.168.10.70:8080',
-    'http://10.10.10.158:8080'
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: [
-    'Content-Type',
-    'Authorization',
-    'X-Requested-With',
-    'Accept',
-    'Origin'
-  ],
-  exposedHeaders: ['Content-Range', 'X-Content-Range'],
-  maxAge: 600 // 10 minutes
+  origin: ['http://localhost:8080', 'http://192.168.10.70:8080'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }));
 
 // Parse JSON bodies with size limit
@@ -1766,15 +1753,6 @@ app.get('/api/dashboard/low-stock', authenticateToken, async (req, res) => {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
-
-// Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/subscribers', subscriberRoutes);
-app.use('/api/inventory', inventoryRoutes);
-app.use('/api/sales', salesRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/cash-drawer', cashDrawerRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
