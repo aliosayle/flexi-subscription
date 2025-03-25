@@ -39,10 +39,12 @@ const authLimiter = rateLimit({
 
 // CORS configuration with stricter options
 app.use(cors({
-  origin: ['http://192.168.10.70:8080', 'http://localhost:8080'],
+  origin: ['http://192.168.10.70:8080', 'http://localhost:8080', 'http://localhost:5173'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 600 // 10 minutes
 }));
 
 // Parse JSON bodies with size limit

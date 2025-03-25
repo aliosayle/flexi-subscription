@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import api from '@/lib/axios';
 
 // User type definition
 interface User {
@@ -62,22 +63,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const login = async (email: string, password: string) => {
     setIsLoading(true);
     try {
-      const response = await fetch('http://localhost:5000/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        credentials: 'include',
-        body: JSON.stringify({ email, password })
-      });
+      const response = await api.post('/api/auth/login', { email, password });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Login failed');
-      }
-
-      const data = await response.json();
+      const data = response.data;
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data));
       
@@ -96,22 +84,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const register = async (name: string, email: string, password: string) => {
     setIsLoading(true);
     try {
-      const response = await fetch('http://localhost:5000/api/auth/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        credentials: 'include',
-        body: JSON.stringify({ name, email, password })
-      });
+      const response = await api.post('/api/auth/register', { name, email, password });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Registration failed');
-      }
-
-      const data = await response.json();
+      const data = response.data;
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data));
       
