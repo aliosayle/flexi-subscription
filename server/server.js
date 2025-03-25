@@ -1076,9 +1076,9 @@ app.post('/api/sales', async (req, res) => {
     // Insert sale record
     const [saleResult] = await connection2.execute(`
       INSERT INTO sales 
-      (total, payment_method, customer_id, customer_name, customer_email, created_by)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `, [total, paymentMethod, customer_id, customer_name, customer_email, created_by]);
+      (subtotal, tax, discount, total, payment_method, customer_id, customer_name, customer_email, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [total, 0, 0, total, paymentMethod, customer_id, customer_name, customer_email, created_by]);
     
     const saleId = saleResult.insertId;
     
