@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { CashDrawer } from '@/components/CashDrawer';
 
 interface DashboardStats {
   totalUsers: number;
@@ -159,15 +160,14 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* Recent Activities and Low Stock Items */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
+      {/* Recent Activities, Low Stock Items, and Cash Drawer */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="md:col-span-2">
           <CardHeader>
             <CardTitle>Recent Activities</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <h2 className="text-lg font-semibold">Recent Activities</h2>
               <div className="space-y-4">
                 {recentActivities.map((activity) => (
                   <div key={`${activity.type}-${activity.created_at}`} className="flex items-center justify-between p-4 bg-white rounded-lg shadow">
@@ -211,32 +211,36 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-yellow-500" />
-              Low Stock Items
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {lowStockItems.map((item) => (
-                <div key={item.id} className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">{item.name}</p>
-                    <p className="text-sm text-muted-foreground">SKU: {item.sku}</p>
+        <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-yellow-500" />
+                Low Stock Items
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {lowStockItems.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{item.name}</p>
+                      <p className="text-sm text-muted-foreground">SKU: {item.sku}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-medium">Qty: {item.quantity}</p>
+                      <p className="text-sm text-muted-foreground">
+                        ${item.price.toFixed(2)}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-medium">Qty: {item.quantity}</p>
-                    <p className="text-sm text-muted-foreground">
-                      ${item.price.toFixed(2)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <CashDrawer />
+        </div>
       </div>
     </div>
   );
