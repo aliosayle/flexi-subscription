@@ -555,12 +555,15 @@ app.post('/api/inventory/items', async (req, res) => {
     const { name, description, sku, barcode, quantity, price, cost, category, imageSrc } = req.body;
     
     // Validate required fields
-    if (!name || !sku || price === undefined || cost === undefined) {
+    if (!name || price === undefined || cost === undefined) {
       return res.status(400).json({ message: 'Missing required fields' });
     }
     
+    // Generate a default SKU if not provided
+    const itemSku = sku || `ITEM-${Date.now()}`;
+    
     // Check if SKU already exists
-    const [existingSku] = await pool.execute('SELECT * FROM inventory_items WHERE sku = ?', [sku]);
+    const [existingSku] = await pool.execute('SELECT * FROM inventory_items WHERE sku = ?', [itemSku]);
     if (existingSku.length > 0) {
       return res.status(400).json({ message: 'Item with this SKU already exists' });
     }
@@ -568,7 +571,7 @@ app.post('/api/inventory/items', async (req, res) => {
     // Insert new item
     const [result] = await pool.execute(
       'INSERT INTO inventory_items (name, description, sku, barcode, quantity, price, cost, category, image_src) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [name, description || '', sku, barcode || '', quantity || 0, price, cost, category || '', imageSrc || '']
+      [name, description || '', itemSku, barcode || '', quantity || 0, price, cost, category || '', imageSrc || '']
     );
     
     const itemId = result.insertId;
@@ -615,7 +618,7 @@ app.put('/api/inventory/items/:id', async (req, res) => {
     const { name, description, sku, barcode, price, cost, category, imageSrc } = req.body;
     
     // Validate required fields
-    if (!name || !sku || price === undefined || cost === undefined) {
+    if (!name || price === undefined || cost === undefined) {
       return res.status(400).json({ message: 'Missing required fields' });
     }
     
@@ -625,8 +628,11 @@ app.put('/api/inventory/items/:id', async (req, res) => {
       return res.status(404).json({ message: 'Item not found' });
     }
     
+    // Use existing SKU if not provided
+    const itemSku = sku || existingItems[0].sku;
+    
     // Check if SKU already exists (for another item)
-    const [existingSku] = await pool.execute('SELECT * FROM inventory_items WHERE sku = ? AND id != ?', [sku, id]);
+    const [existingSku] = await pool.execute('SELECT * FROM inventory_items WHERE sku = ? AND id != ?', [itemSku, id]);
     if (existingSku.length > 0) {
       return res.status(400).json({ message: 'Another item with this SKU already exists' });
     }
@@ -634,7 +640,7 @@ app.put('/api/inventory/items/:id', async (req, res) => {
     // Update item (don't update quantity here, that's handled via transactions)
     await pool.execute(
       'UPDATE inventory_items SET name = ?, description = ?, sku = ?, barcode = ?, price = ?, cost = ?, category = ?, image_src = ? WHERE id = ?',
-      [name, description || '', sku, barcode || '', price, cost, category || '', imageSrc || '', id]
+      [name, description || '', itemSku, barcode || '', price, cost, category || '', imageSrc || '', id]
     );
     
     // Get updated item
