@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { BarChart, Bar } from 'recharts';
-import { Users, Package, ShoppingCart, AlertTriangle, DollarSign, BarChart as RechartsBarChart, TrendingUp, ArrowUpRight, ArrowDownRight, Calendar } from 'lucide-react';
+import { Users, Package, ShoppingCart, AlertTriangle, DollarSign, BarChart as RechartsBarChart, TrendingUp, ArrowUpRight, ArrowDownRight, Calendar, Activity } from 'lucide-react';
 import api from '@/lib/axios';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -10,6 +10,8 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { CashDrawer } from '@/components/CashDrawer';
 import { cn } from '@/lib/utils';
+import { usePermissions } from '@/hooks/usePermissions';
+import { Navigate } from 'react-router-dom';
 
 interface DashboardStats {
   totalUsers: number;
@@ -59,6 +61,7 @@ export default function Dashboard() {
   const [salesByMonth, setSalesByMonth] = useState<SalesByMonth[]>([]);
   const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const { hasPermission } = usePermissions();
 
   const fetchDashboardData = async () => {
     try {
@@ -85,6 +88,10 @@ export default function Dashboard() {
     fetchDashboardData();
   }, []);
 
+  if (!hasPermission('view_reports')) {
+    return <Navigate to="/subscribers" replace />;
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -99,17 +106,15 @@ export default function Dashboard() {
         <div>
           <h1 className="text-3xl font-bold">Dashboard</h1>
           <p className="text-muted-foreground">
-            Welcome back, {stats?.totalUsers}
+            Overview of your business performance
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button asChild>
-            <Link to="/sales-report">
-              <Calendar className="mr-2 h-4 w-4" />
-              View Sales Report
-            </Link>
+        <Link to="/sales-report">
+          <Button>
+            <Activity className="h-4 w-4 mr-2" />
+            View Sales Report
           </Button>
-        </div>
+        </Link>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -121,7 +126,7 @@ export default function Dashboard() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.totalSubscribers}</div>
+            <div className="text-2xl font-bold">{stats?.totalSubscribers || 0}</div>
             <p className="text-xs text-muted-foreground">
               Active members
             </p>
@@ -135,7 +140,7 @@ export default function Dashboard() {
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.totalItems}</div>
+            <div className="text-2xl font-bold">{stats?.totalItems || 0}</div>
             <p className="text-xs text-muted-foreground">
               In stock
             </p>
@@ -149,9 +154,9 @@ export default function Dashboard() {
             <ShoppingCart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${stats?.todaySales.toFixed(2)}</div>
+            <div className="text-2xl font-bold">${stats?.todaySales?.toFixed(2) || '0.00'}</div>
             <p className="text-xs text-muted-foreground">
-              {stats?.todayTransactions} transactions
+              {stats?.todayTransactions || 0} transactions
             </p>
           </CardContent>
         </Card>
@@ -160,10 +165,10 @@ export default function Dashboard() {
             <CardTitle className="text-sm font-medium">
               Monthly Revenue
             </CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${stats?.monthlyRevenue.toFixed(2)}</div>
+            <div className="text-2xl font-bold">${stats?.monthlyRevenue?.toFixed(2) || '0.00'}</div>
             <p className="text-xs text-muted-foreground">
               This month
             </p>
@@ -193,6 +198,7 @@ export default function Dashboard() {
         <Card className="col-span-3">
           <CardHeader>
             <CardTitle>Recent Activity</CardTitle>
+            <CardDescription>Latest actions in the system</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
