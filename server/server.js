@@ -1056,9 +1056,6 @@ app.post('/api/sales', async (req, res) => {
   try {
     const { 
       items, 
-      subtotal, 
-      tax, 
-      discount = 0, 
       total, 
       paymentMethod,
       customer_id = null,
@@ -1072,16 +1069,16 @@ app.post('/api/sales', async (req, res) => {
       return res.status(400).json({ error: 'Sale must have at least one item' });
     }
     
-    if (!subtotal || !tax || !total || !paymentMethod) {
+    if (!total || !paymentMethod) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     
     // Insert sale record
     const [saleResult] = await connection2.execute(`
       INSERT INTO sales 
-      (subtotal, tax, discount, total, payment_method, customer_id, customer_name, customer_email, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [subtotal, tax, discount, total, paymentMethod, customer_id, customer_name, customer_email, created_by]);
+      (total, payment_method, customer_id, customer_name, customer_email, created_by)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [total, paymentMethod, customer_id, customer_name, customer_email, created_by]);
     
     const saleId = saleResult.insertId;
     
@@ -1159,8 +1156,6 @@ app.get('/api/sales/summary', async (req, res) => {
       SELECT 
         DATE_FORMAT(created_at, '${dateFormat}') as period,
         COUNT(*) as count,
-        SUM(subtotal) as subtotal,
-        SUM(tax) as tax,
         SUM(total) as total,
         SUM(CASE WHEN payment_method = 'cash' THEN total ELSE 0 END) as cash_total,
         SUM(CASE WHEN payment_method = 'card' THEN total ELSE 0 END) as card_total

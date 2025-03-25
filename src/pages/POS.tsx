@@ -44,7 +44,6 @@ import { InventoryItem, CartItem, Sale } from '@/types';
 import { cn } from '@/lib/utils';
 import api from '@/lib/axios';
 import { useAuth } from '@/contexts/AuthContext';
-import { TaxConfig } from '@/components/TaxConfig';
 
 const POS = () => {
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -54,7 +53,6 @@ const POS = () => {
   const paymentMethod = 'cash';
   const [loading, setLoading] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
-  const [taxRate, setTaxRate] = useState(10);
   
   // Get current user from auth context
   const { user } = useAuth();
@@ -181,16 +179,8 @@ const POS = () => {
     setCartItems(cartItems.filter(item => item.id !== id));
   };
 
-  const calculateSubtotal = () => {
-    return cartItems.reduce((total, item) => total + item.totalPrice, 0);
-  };
-
-  const calculateTax = () => {
-    return calculateSubtotal() * (taxRate / 100);
-  };
-
   const calculateTotal = () => {
-    return calculateSubtotal() + calculateTax();
+    return cartItems.reduce((total, item) => total + item.totalPrice, 0);
   };
 
   const handleCheckout = async () => {
@@ -207,9 +197,6 @@ const POS = () => {
           price: item.price,
           totalPrice: item.totalPrice
         })),
-        subtotal: calculateSubtotal(),
-        tax: calculateTax(),
-        discount: 0,
         total: calculateTotal(),
         paymentMethod: paymentMethod,
         customer_id: selectedCustomer?.id,
@@ -310,7 +297,7 @@ const POS = () => {
           </div>
         </div>
         
-        {/* Right Column - Shopping Cart and Tax Config */}
+        {/* Right Column - Shopping Cart */}
         <div className="space-y-4">
           <Card>
             <CardHeader className="pb-3">
@@ -381,15 +368,6 @@ const POS = () => {
             
             <CardFooter className="flex flex-col">
               <div className="w-full space-y-2 mb-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Subtotal</span>
-                  <span>${calculateSubtotal().toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Tax ({taxRate}%)</span>
-                  <span>${calculateTax().toFixed(2)}</span>
-                </div>
-                <Separator />
                 <div className="flex justify-between items-center font-bold text-lg">
                   <span>Total</span>
                   <span>${calculateTotal().toFixed(2)}</span>
@@ -407,9 +385,6 @@ const POS = () => {
               </Button>
             </CardFooter>
           </Card>
-
-          {/* Tax Configuration */}
-          <TaxConfig onTaxChange={setTaxRate} />
         </div>
       </div>
       
@@ -433,14 +408,6 @@ const POS = () => {
             <div className="border rounded-lg p-4 bg-muted/50">
               <h3 className="font-medium mb-2">Order Summary</h3>
               <div className="space-y-1">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Subtotal:</span>
-                  <span>${calculateSubtotal().toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Tax ({taxRate}%):</span>
-                  <span>${calculateTax().toFixed(2)}</span>
-                </div>
                 <div className="flex justify-between font-bold mt-2">
                   <span>Total:</span>
                   <span>${calculateTotal().toFixed(2)}</span>
