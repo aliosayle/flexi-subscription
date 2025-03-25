@@ -1766,6 +1766,84 @@ app.get('/api/dashboard/low-stock', authenticateToken, async (req, res) => {
   }
 });
 
+// Get cash drawer balance
+app.get('/api/cash-drawer/balance', authenticateToken, async (req, res) => {
+  try {
+    const [result] = await pool.execute(`
+      SELECT 
+        COALESCE(SUM(CASE 
+          WHEN type = 'sale' THEN amount
+          WHEN type = 'adjustment' THEN amount
+          WHEN type = 'count' THEN amount
+        END), 0) as balance
+      FROM cash_drawer_transactions
+    `);
+    
+    res.json({ balance: result[0].balance });
+  } catch (error) {
+    console.error('Error fetching cash drawer balance:', error);
+    res.status(500).json({ error: 'Failed to fetch cash drawer balance' });
+  }
+});
+
+// Add cash drawer transaction
+app.post('/api/cash-drawer/transactions', authenticateToken, async (req, res) => {
+  try {
+    const { type, amount, notes } = req.body;
+    const created_by = req.user.id;
+    
+    if (!type || !amount) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    if (!['sale', 'adjustment', 'count'].includes(type)) {
+      return res.status(400).json({ error: 'Invalid transaction type' });
+    }
+    
+    await pool.execute(`
+      INSERT INTO cash_drawer_transactions 
+      (type, amount, notes, created_by)
+      VALUES (?, ?, ?, ?)
+    `, [type, amount, notes, created_by]);
+    
+    res.status(201).json({ success: true });
+  } catch (error) {
+    console.error('Error adding cash drawer transaction:', error);
+    res.status(500).json({ error: 'Failed to add cash drawer transaction' });
+  }
+});
+
+// Get cash drawer transactions
+app.get('/api/cash-drawer/transactions', authenticateToken, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    
+    let query = `
+      SELECT 
+        t.*,
+        u.name as created_by_name
+      FROM cash_drawer_transactions t
+      LEFT JOIN users u ON t.created_by = u.id
+    `;
+    
+    const queryParams = [];
+    
+    if (startDate && endDate) {
+      query += ` WHERE t.created_at BETWEEN ? AND ?`;
+      queryParams.push(startDate, endDate);
+    }
+    
+    query += ` ORDER BY t.created_at DESC`;
+    
+    const [transactions] = await pool.execute(query, queryParams);
+    
+    res.json(transactions);
+  } catch (error) {
+    console.error('Error fetching cash drawer transactions:', error);
+    res.status(500).json({ error: 'Failed to fetch cash drawer transactions' });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);

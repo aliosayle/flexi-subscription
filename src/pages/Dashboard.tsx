@@ -2,22 +2,29 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { BarChart, Bar } from 'recharts';
-import { Users, Package, ShoppingCart, AlertTriangle, DollarSign, BarChart as RechartsBarChart } from 'lucide-react';
+import { Users, Package, ShoppingCart, AlertTriangle, DollarSign, BarChart as RechartsBarChart, TrendingUp, ArrowUpRight, ArrowDownRight, Calendar } from 'lucide-react';
 import api from '@/lib/axios';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { CashDrawer } from '@/components/CashDrawer';
+import { cn } from '@/lib/utils';
 
 interface DashboardStats {
   totalUsers: number;
   totalSales: number;
   totalInventory: number;
   totalRevenue: number;
+  totalSubscribers: number;
+  totalItems: number;
+  todaySales: number;
+  todayTransactions: number;
+  monthlyRevenue: number;
 }
 
 interface RecentActivity {
-  type: 'sale' | 'inventory';
+  type: 'sale' | 'inventory' | 'subscription';
   created_at: string;
   amount: number;
   payment_method?: string;
@@ -26,6 +33,8 @@ interface RecentActivity {
   transaction_type?: string;
   item_name?: string;
   quantity?: number;
+  description: string;
+  time: string;
 }
 
 interface SalesByMonth {
@@ -85,152 +94,123 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+    <div className="space-y-4 animate-fade-in">
+      <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-          <p className="text-muted-foreground">Overview of your business performance.</p>
+          <h1 className="text-3xl font-bold">Dashboard</h1>
+          <p className="text-muted-foreground">
+            Welcome back, {stats?.totalUsers}
+          </p>
         </div>
-        <Button asChild>
-          <Link to="/sales-report">
-            <RechartsBarChart className="mr-2 h-4 w-4" />
-            View Sales Report
-          </Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button asChild>
+            <Link to="/sales-report">
+              <Calendar className="mr-2 h-4 w-4" />
+              View Sales Report
+            </Link>
+          </Button>
+        </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Users</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Total Subscribers
+            </CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.totalUsers || 0}</div>
+            <div className="text-2xl font-bold">{stats?.totalSubscribers}</div>
+            <p className="text-xs text-muted-foreground">
+              Active members
+            </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Sales</CardTitle>
-            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats?.totalSales || 0}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Inventory</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Inventory Items
+            </CardTitle>
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.totalInventory || 0}</div>
+            <div className="text-2xl font-bold">{stats?.totalItems}</div>
+            <p className="text-xs text-muted-foreground">
+              In stock
+            </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Today's Sales
+            </CardTitle>
+            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">${stats?.todaySales.toFixed(2)}</div>
+            <p className="text-xs text-muted-foreground">
+              {stats?.todayTransactions} transactions
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Monthly Revenue
+            </CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${stats?.totalRevenue.toFixed(2) || '0.00'}</div>
+            <div className="text-2xl font-bold">${stats?.monthlyRevenue.toFixed(2)}</div>
+            <p className="text-xs text-muted-foreground">
+              This month
+            </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Sales Overview Chart */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Sales Overview</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={salesByMonth}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
-                <Line type="monotone" dataKey="total_sales" stroke="#8884d8" />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Recent Activities and Low Stock Items */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+        <Card className="col-span-4">
           <CardHeader>
-            <CardTitle>Recent Activities</CardTitle>
+            <CardTitle>Revenue Overview</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <h2 className="text-lg font-semibold">Recent Activities</h2>
-              <div className="space-y-4">
-                {recentActivities.map((activity) => (
-                  <div key={`${activity.type}-${activity.created_at}`} className="flex items-center justify-between p-4 bg-white rounded-lg shadow">
-                    <div className="flex items-center space-x-4">
-                      <div className={`p-2 rounded-full ${
-                        activity.type === 'sale' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'
-                      }`}>
-                        {activity.type === 'sale' ? (
-                          <ShoppingCart className="w-5 h-5" />
-                        ) : (
-                          <Package className="w-5 h-5" />
-                        )}
-                      </div>
-                      <div>
-                        <p className="font-medium">
-                          {activity.type === 'sale' ? (
-                            `Sale to ${activity.customer_name || 'Customer'}`
-                          ) : (
-                            `${activity.transaction_type === 'purchase' ? 'Purchase' : 'Sale'} of ${activity.item_name}`
-                          )}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {new Date(activity.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-medium">
-                        ${Number(activity.amount).toFixed(2)}
-                      </p>
-                      {activity.type === 'inventory' && (
-                        <p className="text-sm text-gray-500">
-                          {activity.quantity} units
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+          <CardContent className="pl-2">
+            <div className="h-[200px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={salesByMonth}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="total_sales" stroke="#8884d8" />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
           </CardContent>
         </Card>
-
-        <Card>
+        <Card className="col-span-3">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-yellow-500" />
-              Low Stock Items
-            </CardTitle>
+            <CardTitle>Recent Activity</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {lowStockItems.map((item) => (
-                <div key={item.id} className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">{item.name}</p>
-                    <p className="text-sm text-muted-foreground">SKU: {item.sku}</p>
+              {recentActivities.map((activity, index) => (
+                <div key={index} className="flex items-center">
+                  <div className={cn(
+                    "rounded-full p-2",
+                    activity.type === 'sale' ? 'bg-green-100 text-green-600' :
+                    activity.type === 'subscription' ? 'bg-blue-100 text-blue-600' :
+                    'bg-gray-100 text-gray-600'
+                  )}>
+                    {activity.type === 'sale' ? <ShoppingCart className="h-4 w-4" /> :
+                     activity.type === 'subscription' ? <Users className="h-4 w-4" /> :
+                     <Package className="h-4 w-4" />}
                   </div>
-                  <div className="text-right">
-                    <p className="font-medium">Qty: {item.quantity}</p>
-                    <p className="text-sm text-muted-foreground">
-                      ${item.price.toFixed(2)}
-                    </p>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium">{activity.description}</p>
+                    <p className="text-xs text-muted-foreground">{activity.time}</p>
                   </div>
                 </div>
               ))}
@@ -238,6 +218,9 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Cash Drawer Section */}
+      <CashDrawer />
     </div>
   );
 }
