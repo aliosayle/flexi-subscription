@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Plus, Minus, History } from 'lucide-react';
 import { toast } from 'sonner';
-import api from '@/lib/api';
+import { api } from '@/lib/api';
 
 interface CashDrawerTransaction {
   id: number;
