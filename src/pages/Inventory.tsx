@@ -60,7 +60,8 @@ import {
   ClipboardList,
   X,
   FilePlus,
-  FileText
+  FileText,
+  Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { InventoryItem, InventoryTransaction, TransactionType } from '@/types';
@@ -82,6 +83,17 @@ interface TransactionLineItem {
   price: number;
   total: number;
 }
+
+// Add this constant at the top of the file, after the imports
+const INVENTORY_CATEGORIES = [
+  'Equipment',
+  'Supplements',
+  'Accessories',
+  'Clothing',
+  'Cleaning Supplies',
+  'Office Supplies',
+  'Other'
+] as const;
 
 const Inventory = () => {
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -175,7 +187,6 @@ const Inventory = () => {
       const formData = new FormData(event.currentTarget);
       const name = formData.get('name') as string;
       const description = formData.get('description') as string;
-      const sku = formData.get('sku') as string;
       const barcode = formData.get('barcode') as string;
       const quantity = parseInt(formData.get('quantity') as string);
       const price = parseFloat(formData.get('price') as string);
@@ -185,7 +196,6 @@ const Inventory = () => {
       const itemData = {
         name,
         description,
-        sku,
         barcode,
         quantity,
         price,
@@ -626,118 +636,126 @@ const Inventory = () => {
 
       {/* Add/Edit Item Dialog */}
       <Dialog open={isAddItemDialogOpen} onOpenChange={setIsAddItemDialogOpen}>
-        <DialogContent className="sm:max-w-[550px]">
+        <DialogContent className="sm:max-w-[500px]">
           <form onSubmit={handleAddItem}>
             <DialogHeader>
-              <DialogTitle>
-                {selectedItem ? 'Edit Inventory Item' : 'Add New Inventory Item'}
-              </DialogTitle>
+              <DialogTitle>{selectedItem ? 'Edit Item' : 'Add New Item'}</DialogTitle>
               <DialogDescription>
-                Fill in the item details below. Click save when you're done.
+                {selectedItem 
+                  ? 'Update item details below. Click save when you\'re done.'
+                  : 'Fill in the item details below. Click save when you\'re done.'}
               </DialogDescription>
             </DialogHeader>
             
             <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Item Name</Label>
-                  <Input
-                    id="name"
-                    name="name"
-                    defaultValue={selectedItem?.name || ''}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="category">Category</Label>
-                  <Input
-                    id="category"
-                    name="category"
-                    defaultValue={selectedItem?.category || ''}
-                    required
-                  />
-                </div>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="name" className="text-right">
+                  Name
+                </Label>
                 <Input
-                  id="description"
-                  name="description"
-                  defaultValue={selectedItem?.description || ''}
+                  id="name"
+                  name="name"
+                  defaultValue={selectedItem?.name}
+                  className="col-span-3"
+                  required
                 />
               </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="sku">SKU</Label>
-                  <Input
-                    id="sku"
-                    name="sku"
-                    defaultValue={selectedItem?.sku || ''}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="barcode">Barcode</Label>
-                  <Input
-                    id="barcode"
-                    name="barcode"
-                    defaultValue={selectedItem?.barcode || ''}
-                    required
-                  />
-                </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="description" className="text-right">
+                  Description
+                </Label>
+                <Textarea
+                  id="description"
+                  name="description"
+                  defaultValue={selectedItem?.description}
+                  className="col-span-3"
+                  required
+                />
               </div>
-              
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="quantity">Quantity</Label>
-                  <Input
-                    id="quantity"
-                    name="quantity"
-                    type="number"
-                    min="0"
-                    defaultValue={selectedItem?.quantity || 0}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="cost">Cost ($)</Label>
-                  <Input
-                    id="cost"
-                    name="cost"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    defaultValue={selectedItem?.cost || 0}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="price">Price ($)</Label>
-                  <Input
-                    id="price"
-                    name="price"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    defaultValue={selectedItem?.price || 0}
-                    required
-                  />
-                </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="barcode" className="text-right">
+                  Barcode
+                </Label>
+                <Input
+                  id="barcode"
+                  name="barcode"
+                  defaultValue={selectedItem?.barcode}
+                  className="col-span-3"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="category" className="text-right">
+                  Category
+                </Label>
+                <Select name="category" defaultValue={selectedItem?.category || INVENTORY_CATEGORIES[0]}>
+                  <SelectTrigger className="col-span-3">
+                    <SelectValue placeholder="Select a category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INVENTORY_CATEGORIES.map((category) => (
+                      <SelectItem key={category} value={category}>
+                        {category}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="quantity" className="text-right">
+                  Quantity
+                </Label>
+                <Input
+                  id="quantity"
+                  name="quantity"
+                  type="number"
+                  min="0"
+                  defaultValue={selectedItem?.quantity || 0}
+                  className="col-span-3"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="price" className="text-right">
+                  Price ($)
+                </Label>
+                <Input
+                  id="price"
+                  name="price"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  defaultValue={selectedItem?.price || 0}
+                  className="col-span-3"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="cost" className="text-right">
+                  Cost ($)
+                </Label>
+                <Input
+                  id="cost"
+                  name="cost"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  defaultValue={selectedItem?.cost || 0}
+                  className="col-span-3"
+                  required
+                />
               </div>
             </div>
             
             <DialogFooter>
-              <Button 
-                type="button" 
-                variant="outline" 
-                onClick={() => setIsAddItemDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit">
-                {selectedItem ? 'Update Item' : 'Add Item'}
+              <Button type="submit" disabled={isLoading}>
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {selectedItem ? 'Updating...' : 'Creating...'}
+                  </>
+                ) : (
+                  'Save'
+                )}
               </Button>
             </DialogFooter>
           </form>
