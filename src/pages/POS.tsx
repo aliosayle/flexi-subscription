@@ -37,8 +37,7 @@ import {
   Barcode, 
   Banknote, 
   Check, 
-  XIcon,
-  Wallet
+  XIcon
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { InventoryItem, CartItem, Sale } from '@/types';
@@ -51,10 +50,6 @@ const POS = () => {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isCheckoutDialogOpen, setIsCheckoutDialogOpen] = useState(false);
-  const [isDrawerDialogOpen, setIsDrawerDialogOpen] = useState(false);
-  const [drawerBalance, setDrawerBalance] = useState(0);
-  const [drawerAdjustment, setDrawerAdjustment] = useState('');
-  const [drawerNote, setDrawerNote] = useState('');
   const paymentMethod = 'cash';
   const [loading, setLoading] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
@@ -85,20 +80,9 @@ const POS = () => {
     }
   };
 
-  const fetchDrawerBalance = async () => {
-    try {
-      const response = await api.get('/api/pos/drawer-balance');
-      setDrawerBalance(response.data.balance);
-    } catch (error) {
-      console.error('Error fetching drawer balance:', error);
-      toast.error('Failed to fetch drawer balance');
-    }
-  };
-
-  // Fetch inventory items and drawer balance on component mount
+  // Fetch inventory items on component mount
   useEffect(() => {
     fetchItems();
-    fetchDrawerBalance();
     
     // Focus on the barcode input when the component mounts
     if (barcodeInputRef.current) {
@@ -195,8 +179,16 @@ const POS = () => {
     setCartItems(cartItems.filter(item => item.id !== id));
   };
 
-  const calculateTotal = () => {
+  const calculateSubtotal = () => {
     return cartItems.reduce((total, item) => total + item.totalPrice, 0);
+  };
+
+  const calculateTax = () => {
+    return calculateSubtotal() * 0.1; // 10% tax
+  };
+
+  const calculateTotal = () => {
+    return calculateSubtotal() + calculateTax();
   };
 
   const handleCheckout = async () => {
@@ -213,6 +205,9 @@ const POS = () => {
           price: item.price,
           totalPrice: item.totalPrice
         })),
+        subtotal: calculateSubtotal(),
+        tax: calculateTax(),
+        discount: 0,
         total: calculateTotal(),
         paymentMethod: paymentMethod,
         customer_id: selectedCustomer?.id,
@@ -224,42 +219,17 @@ const POS = () => {
       setSelectedCustomer(null);
       setIsCheckoutDialogOpen(false);
       fetchItems();
-      fetchDrawerBalance(); // Update drawer balance after sale
     } catch (error) {
       console.error('Error completing sale:', error);
       toast.error('Failed to complete sale');
     }
   };
 
-  const handleDrawerAdjustment = async () => {
-    try {
-      const adjustment = parseFloat(drawerAdjustment);
-      if (isNaN(adjustment)) {
-        toast.error('Please enter a valid amount');
-        return;
-      }
-
-      await api.post('/api/pos/drawer-adjustment', {
-        amount: adjustment,
-        note: drawerNote
-      });
-
-      toast.success('Drawer balance updated successfully');
-      setIsDrawerDialogOpen(false);
-      setDrawerAdjustment('');
-      setDrawerNote('');
-      fetchDrawerBalance();
-    } catch (error) {
-      console.error('Error updating drawer balance:', error);
-      toast.error('Failed to update drawer balance');
-    }
-  };
-
   return (
     <div className="space-y-4 animate-fade-in">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Left Column - Product Search and Selection */}
-        <div className="space-y-4">
+        <div className="lg:col-span-2 space-y-4">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle>Point of Sale</CardTitle>
@@ -338,75 +308,9 @@ const POS = () => {
           </div>
         </div>
         
-        {/* Right Column - Shopping Cart and Drawer Balance */}
-        <div className="space-y-4">
-          {/* Drawer Balance Card */}
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex justify-between items-center">
-                <CardTitle className="flex items-center">
-                  <Wallet className="mr-2 h-5 w-5" />
-                  Cash Drawer
-                </CardTitle>
-                <Dialog open={isDrawerDialogOpen} onOpenChange={setIsDrawerDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="outline" size="sm">
-                      Adjust Balance
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Adjust Drawer Balance</DialogTitle>
-                      <DialogDescription>
-                        Enter the amount to add or remove from the drawer.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="adjustment">Amount</Label>
-                        <Input
-                          id="adjustment"
-                          type="number"
-                          step="0.01"
-                          placeholder="Enter amount"
-                          value={drawerAdjustment}
-                          onChange={(e) => setDrawerAdjustment(e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="note">Note</Label>
-                        <Input
-                          id="note"
-                          placeholder="Enter reason for adjustment"
-                          value={drawerNote}
-                          onChange={(e) => setDrawerNote(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button variant="outline" onClick={() => setIsDrawerDialogOpen(false)}>
-                        Cancel
-                      </Button>
-                      <Button onClick={handleDrawerAdjustment}>
-                        Update Balance
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-center">
-                ${drawerBalance.toFixed(2)}
-              </div>
-              <p className="text-sm text-muted-foreground text-center mt-1">
-                Expected cash in drawer
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Shopping Cart Card */}
-          <Card>
+        {/* Right Column - Shopping Cart */}
+        <div className="lg:col-span-1">
+          <Card className="sticky top-20">
             <CardHeader className="pb-3">
               <div className="flex justify-between items-center">
                 <CardTitle className="flex items-center">
@@ -475,6 +379,15 @@ const POS = () => {
             
             <CardFooter className="flex flex-col">
               <div className="w-full space-y-2 mb-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Subtotal</span>
+                  <span>${calculateSubtotal().toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Tax (10%)</span>
+                  <span>${calculateTax().toFixed(2)}</span>
+                </div>
+                <Separator />
                 <div className="flex justify-between items-center font-bold text-lg">
                   <span>Total</span>
                   <span>${calculateTotal().toFixed(2)}</span>
@@ -515,6 +428,14 @@ const POS = () => {
             <div className="border rounded-lg p-4 bg-muted/50">
               <h3 className="font-medium mb-2">Order Summary</h3>
               <div className="space-y-1">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Subtotal:</span>
+                  <span>${calculateSubtotal().toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Tax (10%):</span>
+                  <span>${calculateTax().toFixed(2)}</span>
+                </div>
                 <div className="flex justify-between font-bold mt-2">
                   <span>Total:</span>
                   <span>${calculateTotal().toFixed(2)}</span>

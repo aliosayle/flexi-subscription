@@ -1,8 +1,0 @@
-CREATE TABLE IF NOT EXISTS drawer_adjustments (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  amount DECIMAL(10, 2) NOT NULL,
-  note TEXT,
-  created_by INT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
-); 
