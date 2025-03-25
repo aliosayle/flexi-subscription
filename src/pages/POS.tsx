@@ -203,7 +203,7 @@ const POS = () => {
       // Create sale
       const saleData = {
         items: cartItems.map(item => ({
-          id: item.id,
+          id: item.itemId,
           quantity: item.quantity,
           price: item.price
         })),
@@ -218,6 +218,9 @@ const POS = () => {
       setCartItems([]);
       setIsCheckoutDialogOpen(false);
       toast.success('Sale completed successfully');
+      
+      // Refresh inventory items
+      fetchItems();
     } catch (error) {
       console.error('Error processing sale:', error);
       toast.error('Failed to process sale');

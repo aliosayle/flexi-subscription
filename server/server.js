@@ -1037,10 +1037,13 @@ app.post('/api/sales', authenticateToken, async (req, res) => {
 
     const { items, total, payment_method, customer_id } = req.body;
 
+    // Calculate subtotal from items
+    const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
     // Insert sale
     const [saleResult] = await connection.execute(
-      'INSERT INTO sales (total, payment_method, customer_id, created_by) VALUES (?, ?, ?, ?)',
-      [total, payment_method, customer_id, req.user.id]
+      'INSERT INTO sales (subtotal, total, payment_method, customer_id, created_by) VALUES (?, ?, ?, ?, ?)',
+      [subtotal, total, payment_method, customer_id, req.user.id]
     );
     const saleId = saleResult.insertId;
 
