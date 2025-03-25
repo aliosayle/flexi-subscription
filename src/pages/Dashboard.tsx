@@ -170,8 +170,8 @@ export default function Dashboard() {
             <div className="space-y-4">
               <h2 className="text-lg font-semibold">Recent Activities</h2>
               <div className="space-y-4">
-                {recentActivities.map((activity, index) => (
-                  <div key={`${activity.type}-${activity.created_at}-${index}`} className="flex items-center justify-between p-4 bg-white rounded-lg shadow">
+                {recentActivities.map((activity) => (
+                  <div key={`${activity.type}-${activity.created_at}`} className="flex items-center justify-between p-4 bg-white rounded-lg shadow">
                     <div className="flex items-center space-x-4">
                       <div className={`p-2 rounded-full ${
                         activity.type === 'sale' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'

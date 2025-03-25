@@ -196,36 +196,32 @@ const POS = () => {
       toast.error('Cart is empty');
       return;
     }
-
+    
     try {
-      setLoading(true);
-
-      // Create sale
-      const saleData = {
+      await api.post('/api/sales', {
         items: cartItems.map(item => ({
-          id: item.itemId,
+          itemId: item.itemId,
           quantity: item.quantity,
-          price: item.price
+          price: item.price,
+          totalPrice: item.totalPrice
         })),
+        subtotal: calculateSubtotal(),
+        tax: calculateTax(),
+        discount: 0,
         total: calculateTotal(),
-        payment_method: 'cash', // Always cash for POS
-        customer_id: null // Optional: Add customer selection if needed
-      };
-
-      await api.post('/api/sales', saleData);
-
-      // Clear cart and close dialog
-      setCartItems([]);
-      setIsCheckoutDialogOpen(false);
+        paymentMethod: paymentMethod,
+        customer_id: selectedCustomer?.id,
+        customer_name: selectedCustomer?.name,
+        customer_email: selectedCustomer?.email
+      });
       toast.success('Sale completed successfully');
-      
-      // Refresh inventory items
+      setCartItems([]);
+      setSelectedCustomer(null);
+      setIsCheckoutDialogOpen(false);
       fetchItems();
     } catch (error) {
-      console.error('Error processing sale:', error);
-      toast.error('Failed to process sale');
-    } finally {
-      setLoading(false);
+      console.error('Error completing sale:', error);
+      toast.error('Failed to complete sale');
     }
   };
 
