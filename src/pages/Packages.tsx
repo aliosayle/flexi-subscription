@@ -44,6 +44,7 @@ import { Check, Plus, Pencil, Trash2, Package, Loader2 } from 'lucide-react';
 import { SubscriptionPackage } from '@/types';
 import { Link } from "react-router-dom";
 import api from '@/lib/axios';
+import { Switch } from '@/components/ui/switch';
 
 const Packages = () => {
   const [packages, setPackages] = useState<SubscriptionPackage[]>([]);
