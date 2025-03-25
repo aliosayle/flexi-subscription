@@ -2,10 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { BarChart, Bar } from 'recharts';
-import { Users, Package, ShoppingCart, AlertTriangle, DollarSign } from 'lucide-react';
+import { Users, Package, ShoppingCart, AlertTriangle, DollarSign, BarChart as RechartsBarChart } from 'lucide-react';
 import api from '@/lib/axios';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { Link } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
 
 interface DashboardStats {
   totalUsers: number;
@@ -83,9 +85,22 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+          <p className="text-muted-foreground">Overview of your business performance.</p>
+        </div>
+        <Button asChild>
+          <Link to="/sales-report">
+            <RechartsBarChart className="mr-2 h-4 w-4" />
+            View Sales Report
+          </Link>
+        </Button>
+      </div>
+
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Users</CardTitle>
