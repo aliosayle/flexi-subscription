@@ -50,16 +50,13 @@ app.use(express.json({ limit: '10kb' }));
 
 // Database connection with SSL in production
 const pool = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME || 'flexi_subscription',
+  host: 'localhost',
+  user: 'root',
+  password: '',
+  database: 'flexigym',
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0,
-  ssl: process.env.NODE_ENV === 'production' ? {
-    rejectUnauthorized: false
-  } : false
+  queueLimit: 0
 });
 
 // Test database connection
