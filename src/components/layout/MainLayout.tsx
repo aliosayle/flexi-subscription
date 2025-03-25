@@ -1,13 +1,23 @@
-
 import React from 'react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { Toaster } from '@/components/ui/sonner';
 import { cn } from '@/lib/utils';
+import { LayoutDashboard, Package, ShoppingCart, Users, UserCog, Building2 } from 'lucide-react';
 
 interface MainLayoutProps {
   children: React.ReactNode;
 }
+
+const navigation = [
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Inventory', href: '/inventory', icon: Package },
+  { name: 'POS', href: '/pos', icon: ShoppingCart },
+  { name: 'Subscribers', href: '/subscribers', icon: Users },
+  { name: 'Packages', href: '/packages', icon: Package },
+  { name: 'Users', href: '/users', icon: UserCog },
+  { name: 'Branches', href: '/branches', icon: Building2 },
+];
 
 export function MainLayout({ children }: MainLayoutProps) {
   return (

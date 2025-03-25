@@ -484,33 +484,16 @@ app.delete('/api/packages/:id', async (req, res) => {
 //
 
 // Get all inventory items
-app.get('/api/inventory/items', async (req, res) => {
+app.get('/api/inventory/items', authenticateToken, async (req, res) => {
   try {
-    const [items] = await pool.execute(`
-      SELECT * FROM inventory_items
-      ORDER BY name ASC
-    `);
-    
-    // Format response
-    const formattedItems = items.map(item => ({
-      id: item.id.toString(),
-      name: item.name,
-      description: item.description || '',
-      sku: item.sku,
-      barcode: item.barcode || '',
-      quantity: item.quantity,
-      price: parseFloat(item.price),
-      cost: parseFloat(item.cost),
-      category: item.category || '',
-      imageSrc: item.image_src || 'https://placehold.co/100x100',
-      createdAt: item.created_at,
-      updatedAt: item.updated_at
-    }));
-    
-    res.json(formattedItems);
+    const [items] = await pool.query(
+      'SELECT * FROM inventory_items WHERE branch_id = ? ORDER BY name',
+      [req.user.branch_id]
+    );
+    res.json(items);
   } catch (error) {
     console.error('Error fetching inventory items:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ error: 'Failed to fetch inventory items' });
   }
 });
 
@@ -550,61 +533,18 @@ app.get('/api/inventory/items/:id', async (req, res) => {
 });
 
 // Create inventory item
-app.post('/api/inventory/items', async (req, res) => {
+app.post('/api/inventory/items', authenticateToken, async (req, res) => {
+  const { name, description, sku, quantity, price, cost } = req.body;
   try {
-    const { name, description, sku, barcode, quantity, price, cost, category, imageSrc } = req.body;
-    
-    // Validate required fields
-    if (!name || !sku || price === undefined || cost === undefined) {
-      return res.status(400).json({ message: 'Missing required fields' });
-    }
-    
-    // Check if SKU already exists
-    const [existingSku] = await pool.execute('SELECT * FROM inventory_items WHERE sku = ?', [sku]);
-    if (existingSku.length > 0) {
-      return res.status(400).json({ message: 'Item with this SKU already exists' });
-    }
-    
-    // Insert new item
-    const [result] = await pool.execute(
-      'INSERT INTO inventory_items (name, description, sku, barcode, quantity, price, cost, category, image_src) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [name, description || '', sku, barcode || '', quantity || 0, price, cost, category || '', imageSrc || '']
+    const [result] = await pool.query(
+      'INSERT INTO inventory_items (id, name, description, sku, quantity, price, cost, branch_id) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?)',
+      [name, description, sku, quantity, price, cost, req.user.branch_id]
     );
-    
-    const itemId = result.insertId;
-    
-    // If there's an initial quantity, create a beginning transaction
-    if (quantity && quantity > 0) {
-      await pool.execute(
-        'INSERT INTO inventory_transactions (item_id, type, quantity, price, total_amount, notes) VALUES (?, ?, ?, ?, ?, ?)',
-        [itemId, 'beginning', quantity, cost, cost * quantity, 'Initial inventory']
-      );
-    }
-    
-    // Get the newly created item
-    const [items] = await pool.execute('SELECT * FROM inventory_items WHERE id = ?', [itemId]);
-    const item = items[0];
-    
-    // Format response
-    const newItem = {
-      id: item.id.toString(),
-      name: item.name,
-      description: item.description || '',
-      sku: item.sku,
-      barcode: item.barcode || '',
-      quantity: item.quantity,
-      price: parseFloat(item.price),
-      cost: parseFloat(item.cost),
-      category: item.category || '',
-      imageSrc: item.image_src || 'https://placehold.co/100x100',
-      createdAt: item.created_at,
-      updatedAt: item.updated_at
-    };
-    
-    res.status(201).json(newItem);
+    const [newItem] = await pool.query('SELECT * FROM inventory_items WHERE id = ?', [result.insertId]);
+    res.status(201).json(newItem[0]);
   } catch (error) {
     console.error('Error creating inventory item:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ error: 'Failed to create inventory item' });
   }
 });
 
@@ -1749,6 +1689,59 @@ app.get('/api/dashboard/low-stock', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error fetching low stock items:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Branch routes
+app.get('/api/branches', authenticateToken, async (req, res) => {
+  try {
+    const [branches] = await pool.query('SELECT * FROM branches ORDER BY name');
+    res.json(branches);
+  } catch (error) {
+    console.error('Error fetching branches:', error);
+    res.status(500).json({ error: 'Failed to fetch branches' });
+  }
+});
+
+app.post('/api/branches', authenticateToken, async (req, res) => {
+  const { name, address, phone, email } = req.body;
+  try {
+    const [result] = await pool.query(
+      'INSERT INTO branches (id, name, address, phone, email) VALUES (UUID(), ?, ?, ?, ?)',
+      [name, address, phone, email]
+    );
+    const [newBranch] = await pool.query('SELECT * FROM branches WHERE id = ?', [result.insertId]);
+    res.status(201).json(newBranch[0]);
+  } catch (error) {
+    console.error('Error creating branch:', error);
+    res.status(500).json({ error: 'Failed to create branch' });
+  }
+});
+
+app.put('/api/branches/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { name, address, phone, email } = req.body;
+  try {
+    await pool.query(
+      'UPDATE branches SET name = ?, address = ?, phone = ?, email = ? WHERE id = ?',
+      [name, address, phone, email, id]
+    );
+    const [updatedBranch] = await pool.query('SELECT * FROM branches WHERE id = ?', [id]);
+    res.json(updatedBranch[0]);
+  } catch (error) {
+    console.error('Error updating branch:', error);
+    res.status(500).json({ error: 'Failed to update branch' });
+  }
+});
+
+app.delete('/api/branches/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query('DELETE FROM branches WHERE id = ?', [id]);
+    res.status(204).send();
+  } catch (error) {
+    console.error('Error deleting branch:', error);
+    res.status(500).json({ error: 'Failed to delete branch' });
   }
 });
 

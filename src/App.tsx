@@ -17,6 +17,7 @@ import NotFound from "@/pages/NotFound";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import Subscribers from "@/pages/Subscribers";
+import Branches from "@/pages/Branches";
 
 const queryClient = new QueryClient();
 
@@ -105,6 +106,16 @@ const AppWithProviders = () => (
             <ProtectedRoute>
               <MainLayout>
                 <Users />
+              </MainLayout>
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/branches" 
+          element={
+            <ProtectedRoute>
+              <MainLayout>
+                <Branches />
               </MainLayout>
             </ProtectedRoute>
           } 
