@@ -5,9 +5,8 @@ import { BarChart, Bar } from 'recharts';
 import { Users, Package, ShoppingCart, AlertTriangle, DollarSign, BarChart as RechartsBarChart } from 'lucide-react';
 import api from '@/lib/axios';
 import { useAuth } from '@/contexts/AuthContext';
-import { usePermissions } from '@/hooks/usePermissions';
 import { toast } from 'sonner';
-import { Link, Navigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 
 interface DashboardStats {
@@ -46,17 +45,11 @@ interface LowStockItem {
 
 export default function Dashboard() {
   const { token } = useAuth();
-  const { hasPermission } = usePermissions();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
   const [salesByMonth, setSalesByMonth] = useState<SalesByMonth[]>([]);
   const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Check for view_reports permission
-  if (!hasPermission('view_reports')) {
-    return <Navigate to="/subscribers" replace />;
-  }
 
   const fetchDashboardData = async () => {
     try {

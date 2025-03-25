@@ -1766,6 +1766,39 @@ app.get('/api/dashboard/low-stock', authenticateToken, async (req, res) => {
   }
 });
 
+// Get tax rate
+app.get('/api/settings/tax-rate', authenticateToken, async (req, res) => {
+  try {
+    const [settings] = await pool.execute('SELECT tax_rate FROM settings WHERE id = 1');
+    if (settings.length === 0) {
+      // If no settings exist, create default settings
+      await pool.execute('INSERT INTO settings (id, tax_rate) VALUES (1, 10)');
+      return res.json({ taxRate: 10 });
+    }
+    res.json({ taxRate: settings[0].tax_rate });
+  } catch (error) {
+    console.error('Error fetching tax rate:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Update tax rate
+app.put('/api/settings/tax-rate', authenticateToken, async (req, res) => {
+  try {
+    const { taxRate } = req.body;
+    
+    if (taxRate === undefined || taxRate < 0 || taxRate > 100) {
+      return res.status(400).json({ message: 'Invalid tax rate' });
+    }
+    
+    await pool.execute('UPDATE settings SET tax_rate = ? WHERE id = 1', [taxRate]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating tax rate:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);

@@ -44,6 +44,7 @@ import { InventoryItem, CartItem, Sale } from '@/types';
 import { cn } from '@/lib/utils';
 import api from '@/lib/axios';
 import { useAuth } from '@/contexts/AuthContext';
+import { TaxConfig } from '@/components/TaxConfig';
 
 const POS = () => {
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -53,6 +54,7 @@ const POS = () => {
   const paymentMethod = 'cash';
   const [loading, setLoading] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
+  const [taxRate, setTaxRate] = useState(10);
   
   // Get current user from auth context
   const { user } = useAuth();
@@ -184,7 +186,7 @@ const POS = () => {
   };
 
   const calculateTax = () => {
-    return calculateSubtotal() * 0.1; // 10% tax
+    return calculateSubtotal() * (taxRate / 100);
   };
 
   const calculateTotal = () => {
@@ -227,9 +229,9 @@ const POS = () => {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Left Column - Product Search and Selection */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className="space-y-4">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle>Point of Sale</CardTitle>
@@ -308,9 +310,9 @@ const POS = () => {
           </div>
         </div>
         
-        {/* Right Column - Shopping Cart */}
-        <div className="lg:col-span-1">
-          <Card className="sticky top-20">
+        {/* Right Column - Shopping Cart and Tax Config */}
+        <div className="space-y-4">
+          <Card>
             <CardHeader className="pb-3">
               <div className="flex justify-between items-center">
                 <CardTitle className="flex items-center">
@@ -384,7 +386,7 @@ const POS = () => {
                   <span>${calculateSubtotal().toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Tax (10%)</span>
+                  <span className="text-muted-foreground">Tax ({taxRate}%)</span>
                   <span>${calculateTax().toFixed(2)}</span>
                 </div>
                 <Separator />
@@ -405,6 +407,9 @@ const POS = () => {
               </Button>
             </CardFooter>
           </Card>
+
+          {/* Tax Configuration */}
+          <TaxConfig onTaxChange={setTaxRate} />
         </div>
       </div>
       
@@ -433,7 +438,7 @@ const POS = () => {
                   <span>${calculateSubtotal().toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Tax (10%):</span>
+                  <span className="text-muted-foreground">Tax ({taxRate}%):</span>
                   <span>${calculateTax().toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between font-bold mt-2">
