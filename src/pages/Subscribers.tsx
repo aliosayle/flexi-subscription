@@ -40,7 +40,14 @@ import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Edit, Trash2, CreditCard, Calendar } from 'lucide-react';
+import { Plus, Edit, Trash2, CreditCard, Calendar, Search, X } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import api from '@/lib/axios';
 
 interface Subscriber {
   id: number;
@@ -100,12 +107,15 @@ const subscriptionSchema = z.object({
 
 const Subscribers = () => {
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
+  const [filteredSubscribers, setFilteredSubscribers] = useState<Subscriber[]>([]);
   const [packages, setPackages] = useState<Package[]>([]);
   const [selectedSubscriber, setSelectedSubscriber] = useState<Subscriber | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isSubscriptionDialogOpen, setIsSubscriptionDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const { token } = useAuth();
 
   const form = useForm<z.infer<typeof subscriberSchema>>({
@@ -136,24 +146,37 @@ const Subscribers = () => {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    applyFilters();
+  }, [subscribers, searchQuery, statusFilter]);
+
+  const applyFilters = () => {
+    let filtered = [...subscribers];
+
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(subscriber => 
+        subscriber.name.toLowerCase().includes(query) ||
+        (subscriber.email?.toLowerCase().includes(query)) ||
+        (subscriber.phone?.toLowerCase().includes(query))
+      );
+    }
+
+    if (statusFilter) {
+      filtered = filtered.filter(subscriber => 
+        subscriber.current_status === statusFilter
+      );
+    }
+
+    setFilteredSubscribers(filtered);
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
       const [subscribersRes, packagesRes] = await Promise.all([
-        axios.get('http://localhost:5000/api/subscribers', {
-          withCredentials: true,
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          }
-        }),
-        axios.get('http://localhost:5000/api/packages', {
-          withCredentials: true,
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          }
-        })
+        api.get('/api/subscribers'),
+        api.get('/api/packages')
       ]);
 
       setSubscribers(subscribersRes.data);
@@ -169,30 +192,10 @@ const Subscribers = () => {
   const onSubmit = async (values: z.infer<typeof subscriberSchema>) => {
     try {
       if (selectedSubscriber) {
-        await axios.put(
-          `http://localhost:5000/api/subscribers/${selectedSubscriber.id}`,
-          values,
-          {
-            withCredentials: true,
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            }
-          }
-        );
+        await api.put(`/api/subscribers/${selectedSubscriber.id}`, values);
         toast.success('Subscriber updated successfully');
       } else {
-        await axios.post(
-          'http://localhost:5000/api/subscribers',
-          values,
-          {
-            withCredentials: true,
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            }
-          }
-        );
+        await api.post('/api/subscribers', values);
         toast.success('Subscriber added successfully');
       }
       setIsAddDialogOpen(false);
@@ -215,25 +218,15 @@ const Subscribers = () => {
       const endDate = new Date(startDate);
       endDate.setDate(endDate.getDate() + selectedPackage.days);
 
-      await axios.post(
-        'http://localhost:5000/api/subscriptions',
-        {
-          subscriber_id: selectedSubscriber.id,
-          package_id: values.package_id,
-          start_date: format(startDate, 'yyyy-MM-dd'),
-          end_date: format(endDate, 'yyyy-MM-dd'),
-          total_amount: selectedPackage.price,
-          payment_method: values.payment_method,
-          notes: values.notes,
-        },
-        {
-          withCredentials: true,
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      );
+      await api.post('/api/subscriptions', {
+        subscriber_id: selectedSubscriber.id,
+        package_id: values.package_id,
+        start_date: format(startDate, 'yyyy-MM-dd'),
+        end_date: format(endDate, 'yyyy-MM-dd'),
+        total_amount: selectedPackage.price,
+        payment_method: values.payment_method,
+        notes: values.notes,
+      });
 
       toast.success('Subscription created successfully');
       setIsSubscriptionDialogOpen(false);
@@ -248,13 +241,7 @@ const Subscribers = () => {
     if (!confirm('Are you sure you want to delete this subscriber?')) return;
 
     try {
-      await axios.delete(`http://localhost:5000/api/subscribers/${id}`, {
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      await api.delete(`/api/subscribers/${id}`);
       toast.success('Subscriber deleted successfully');
       fetchData();
     } catch (error) {
@@ -287,6 +274,11 @@ const Subscribers = () => {
       notes: '',
     });
     setIsSubscriptionDialogOpen(true);
+  };
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setStatusFilter(null);
   };
 
   if (loading) {
@@ -432,6 +424,85 @@ const Subscribers = () => {
         </Dialog>
       </div>
 
+      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+        <div className="relative flex-1">
+          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by name, email, or phone..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-8"
+          />
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="w-full sm:w-auto">
+              Status: {statusFilter ? statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1) : 'All'}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-[200px]">
+            <DropdownMenuCheckboxItem
+              checked={!statusFilter}
+              onCheckedChange={() => setStatusFilter(null)}
+            >
+              All
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              checked={statusFilter === 'active'}
+              onCheckedChange={() => setStatusFilter('active')}
+            >
+              Active
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              checked={statusFilter === 'expired'}
+              onCheckedChange={() => setStatusFilter('expired')}
+            >
+              Expired
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              checked={statusFilter === 'no_subscription'}
+              onCheckedChange={() => setStatusFilter('no_subscription')}
+            >
+              No Subscription
+            </DropdownMenuCheckboxItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        {(searchQuery || statusFilter) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearFilters}
+            className="h-9 px-2"
+          >
+            <X className="h-4 w-4 mr-2" />
+            Clear
+          </Button>
+        )}
+      </div>
+
+      {(searchQuery || statusFilter) && (
+        <div className="flex flex-wrap gap-2">
+          {searchQuery && (
+            <Badge variant="secondary" className="flex items-center gap-1">
+              Search: {searchQuery}
+              <X
+                className="h-3 w-3 cursor-pointer"
+                onClick={() => setSearchQuery('')}
+              />
+            </Badge>
+          )}
+          {statusFilter && (
+            <Badge variant="secondary" className="flex items-center gap-1">
+              Status: {statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)}
+              <X
+                className="h-3 w-3 cursor-pointer"
+                onClick={() => setStatusFilter(null)}
+              />
+            </Badge>
+          )}
+        </div>
+      )}
+
       <Table>
         <TableHeader>
           <TableRow>
@@ -443,71 +514,78 @@ const Subscribers = () => {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {subscribers.map((subscriber) => (
-            <TableRow key={subscriber.id}>
-              <TableCell>{subscriber.name}</TableCell>
-              <TableCell>
-                <div>
-                  <div>{subscriber.email || 'No email'}</div>
-                  <div className="text-sm text-muted-foreground">
-                    {subscriber.phone || 'No phone'}
-                  </div>
-                </div>
-              </TableCell>
-              <TableCell>
-                <div>
-                  <div>{subscriber.total_subscriptions} subscriptions</div>
-                  {subscriber.latest_end_date && (
-                    <div className="text-sm text-muted-foreground">
-                      Expires: {format(new Date(subscriber.latest_end_date), 'MMM d, yyyy')}
-                    </div>
-                  )}
-                </div>
-              </TableCell>
-              <TableCell>
-                <Badge
-                  variant={
-                    subscriber.current_status === 'active'
-                      ? 'default'
-                      : subscriber.current_status === 'expired'
-                      ? 'destructive'
-                      : 'secondary'
-                  }
-                >
-                  {subscriber.current_status || 'No active subscription'}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => handleAddSubscription(subscriber)}
-                  >
-                    <Calendar className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => handleEdit(subscriber)}
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => handleDelete(subscriber.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
+          {filteredSubscribers.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={5} className="text-center py-8">
+                No subscribers found matching your filters.
               </TableCell>
             </TableRow>
-          ))}
+          ) : (
+            filteredSubscribers.map((subscriber) => (
+              <TableRow key={subscriber.id}>
+                <TableCell>{subscriber.name}</TableCell>
+                <TableCell>
+                  <div>
+                    <div>{subscriber.email || 'No email'}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {subscriber.phone || 'No phone'}
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div>
+                    <div>{subscriber.total_subscriptions} subscriptions</div>
+                    {subscriber.latest_end_date && (
+                      <div className="text-sm text-muted-foreground">
+                        Expires: {format(new Date(subscriber.latest_end_date), 'MMM d, yyyy')}
+                      </div>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Badge
+                    variant={
+                      subscriber.current_status === 'active'
+                        ? 'default'
+                        : subscriber.current_status === 'expired'
+                        ? 'destructive'
+                        : 'secondary'
+                    }
+                  >
+                    {subscriber.current_status || 'No active subscription'}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => handleAddSubscription(subscriber)}
+                    >
+                      <Calendar className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => handleEdit(subscriber)}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => handleDelete(subscriber.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
         </TableBody>
       </Table>
 
-      {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -515,7 +593,119 @@ const Subscribers = () => {
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              {/* Same form fields as Add Dialog */}
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Name</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input type="email" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="address"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Address</FormLabel>
+                    <FormControl>
+                      <Textarea {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="date_of_birth"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Date of Birth</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="gender"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Gender</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select gender" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="male">Male</SelectItem>
+                        <SelectItem value="female">Female</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="emergency_contact"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Emergency Contact</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="emergency_phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Emergency Phone</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <Button type="submit" className="w-full">
                 Update Subscriber
               </Button>
@@ -524,7 +714,6 @@ const Subscribers = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Subscription Dialog */}
       <Dialog open={isSubscriptionDialogOpen} onOpenChange={setIsSubscriptionDialogOpen}>
         <DialogContent>
           <DialogHeader>

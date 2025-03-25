@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 
 // User type definition
 interface User {
@@ -59,15 +58,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(false);
   }, []);
 
-  // Replace all instances of 'http://localhost:5000' with your server URL
-  const API_URL = 'http://192.168.10.70:5000';  // or whatever port your backend runs on
-
   // Login function
   const login = async (email: string, password: string) => {
     setIsLoading(true);
     try {
-      const response = await axios.post(`${API_URL}/api/auth/login`, { email, password }, {
-        withCredentials: true
+      const response = await fetch('http://localhost:5000/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({ email, password })
       });
 
       if (!response.ok) {
@@ -94,8 +96,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const register = async (name: string, email: string, password: string) => {
     setIsLoading(true);
     try {
-      const response = await axios.post(`${API_URL}/api/auth/register`, { name, email, password }, {
-        withCredentials: true
+      const response = await fetch('http://localhost:5000/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({ name, email, password })
       });
 
       if (!response.ok) {

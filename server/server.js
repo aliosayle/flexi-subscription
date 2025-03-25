@@ -4,30 +4,62 @@ const cors = require('cors');
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const xss = require('xss-clean');
+const hpp = require('hpp');
+const morgan = require('morgan');
+const { body, validationResult } = require('express-validator');
 const app = express();
 const PORT = process.env.PORT || 5000;
+const HOST = process.env.HOST || '0.0.0.0';
 
-// CORS configuration
+// Security middleware
+app.use(helmet()); // Adds various HTTP headers for security
+app.use(xss()); // Prevent XSS attacks
+app.use(hpp()); // Prevent HTTP Parameter Pollution
+app.use(morgan('combined')); // Logging
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.'
+});
+
+// Apply rate limiting to all routes
+app.use(limiter);
+
+// Stricter rate limit for auth routes
+const authLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // Limit each IP to 5 login attempts per hour
+  message: 'Too many login attempts, please try again later.'
+});
+
+// CORS configuration with stricter options
 app.use(cors({
-  origin: [
-    'http://192.168.10.70:8080',  // Add your frontend URL
-    'http://localhost:8080',      // Keep localhost for development
-  ],
-  credentials: true
+  origin: ['http://192.168.10.70:8080', 'http://localhost:8080'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Parse JSON bodies
-app.use(express.json());
+// Parse JSON bodies with size limit
+app.use(express.json({ limit: '10kb' }));
 
-// Database connection
+// Database connection with SSL in production
 const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'flexigym',
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME || 'flexi_subscription',
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0
+  queueLimit: 0,
+  ssl: process.env.NODE_ENV === 'production' ? {
+    rejectUnauthorized: false
+  } : false
 });
 
 // Test database connection
@@ -44,10 +76,14 @@ async function testConnection() {
 
 testConnection();
 
-// JWT secret
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+// JWT secret with better security
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('JWT_SECRET is not set in environment variables');
+  process.exit(1);
+}
 
-// Authentication middleware
+// Enhanced authentication middleware
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -58,27 +94,35 @@ const authenticateToken = (req, res, next) => {
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
-      return res.status(403).json({ error: 'Invalid or expired token' });
+      if (err.name === 'TokenExpiredError') {
+        return res.status(401).json({ error: 'Token expired' });
+      }
+      return res.status(403).json({ error: 'Invalid token' });
     }
     req.user = user;
     next();
   });
 };
 
-// Middleware
-app.use(express.json());
+// Input validation middleware
+const validateLogin = [
+  body('email').isEmail().normalizeEmail(),
+  body('password').isLength({ min: 8 }),
+  (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    next();
+  }
+];
 
-// Simple test route
-app.get('/', (req, res) => {
-  res.send('API is running...');
-});
-
-// Auth routes
-app.post('/api/auth/login', async (req, res) => {
+// Enhanced login route with validation and rate limiting
+app.post('/api/auth/login', authLimiter, validateLogin, async (req, res) => {
   try {
     const { email, password } = req.body;
     
-    // Get user from database
+    // Get user from database with prepared statement
     const [users] = await pool.execute(
       'SELECT u.*, r.name as role_name, r.description as role_description, GROUP_CONCAT(DISTINCT p.name) as permissions FROM users u LEFT JOIN roles r ON u.role_id = r.id LEFT JOIN role_permissions rp ON r.id = rp.role_id LEFT JOIN permissions p ON rp.permission_id = p.id WHERE u.email = ? GROUP BY u.id',
       [email]
@@ -86,19 +130,12 @@ app.post('/api/auth/login', async (req, res) => {
     
     const user = users[0];
     
-    // Check if user exists
-    if (!user) {
+    // Use constant-time comparison for password check
+    if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
     
-    // Check password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    
-    if (!isPasswordValid) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-    
-    // Create token
+    // Create token with shorter expiration
     const token = jwt.sign(
       { 
         id: user.id, 
@@ -109,11 +146,22 @@ app.post('/api/auth/login', async (req, res) => {
         permissions: user.permissions
       },
       JWT_SECRET,
-      { expiresIn: '1d' }
+      { 
+        expiresIn: '1h',
+        algorithm: 'HS256'
+      }
     );
     
-    // Send response without password
+    // Send response without sensitive data
     const { password: _, ...userWithoutPassword } = user;
+    
+    // Set secure cookie with token
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 3600000 // 1 hour
+    });
     
     res.json({
       ...userWithoutPassword,
@@ -285,13 +333,13 @@ app.post('/api/packages', async (req, res) => {
     }
     
     // Insert new package
-    const [result] = await pool.query(
+    const [result] = await pool.execute(
       'INSERT INTO packages (name, description, days, price, features, is_popular) VALUES (?, ?, ?, ?, ?, ?)',
       [name, description || '', days, price, JSON.stringify(features), isPopular || false]
     );
     
     // Get the newly created package
-    const [packages] = await pool.query('SELECT * FROM packages WHERE id = ?', [result.insertId]);
+    const [packages] = await pool.execute('SELECT * FROM packages WHERE id = ?', [result.insertId]);
     const pkg = packages[0];
     
     // Parse features from JSON string to array with error handling
@@ -345,20 +393,20 @@ app.put('/api/packages/:id', async (req, res) => {
     }
     
     // Check if package exists
-    const [existingPackages] = await pool.query('SELECT * FROM packages WHERE id = ?', [id]);
+    const [existingPackages] = await pool.execute('SELECT * FROM packages WHERE id = ?', [id]);
     
     if (existingPackages.length === 0) {
       return res.status(404).json({ message: 'Package not found' });
     }
     
     // Update package
-    await pool.query(
+    await pool.execute(
       'UPDATE packages SET name = ?, description = ?, days = ?, price = ?, features = ?, is_popular = ? WHERE id = ?',
       [name, description || '', days, price, JSON.stringify(features), isPopular || false, id]
     );
     
     // Get updated package
-    const [packages] = await pool.query('SELECT * FROM packages WHERE id = ?', [id]);
+    const [packages] = await pool.execute('SELECT * FROM packages WHERE id = ?', [id]);
     const pkg = packages[0];
     
     // Parse features from JSON string to array with error handling
@@ -406,14 +454,14 @@ app.delete('/api/packages/:id', async (req, res) => {
     const { id } = req.params;
     
     // Check if package exists
-    const [existingPackages] = await pool.query('SELECT * FROM packages WHERE id = ?', [id]);
+    const [existingPackages] = await pool.execute('SELECT * FROM packages WHERE id = ?', [id]);
     
     if (existingPackages.length === 0) {
       return res.status(404).json({ message: 'Package not found' });
     }
     
     // Delete package
-    await pool.query('DELETE FROM packages WHERE id = ?', [id]);
+    await pool.execute('DELETE FROM packages WHERE id = ?', [id]);
     
     res.json({ message: 'Package deleted successfully' });
   } catch (error) {
@@ -429,7 +477,7 @@ app.delete('/api/packages/:id', async (req, res) => {
 // Get all inventory items
 app.get('/api/inventory/items', async (req, res) => {
   try {
-    const [items] = await pool.query(`
+    const [items] = await pool.execute(`
       SELECT * FROM inventory_items
       ORDER BY name ASC
     `);
@@ -461,7 +509,7 @@ app.get('/api/inventory/items', async (req, res) => {
 app.get('/api/inventory/items/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const [items] = await pool.query('SELECT * FROM inventory_items WHERE id = ?', [id]);
+    const [items] = await pool.execute('SELECT * FROM inventory_items WHERE id = ?', [id]);
     
     if (items.length === 0) {
       return res.status(404).json({ message: 'Item not found' });
@@ -503,13 +551,13 @@ app.post('/api/inventory/items', async (req, res) => {
     }
     
     // Check if SKU already exists
-    const [existingSku] = await pool.query('SELECT * FROM inventory_items WHERE sku = ?', [sku]);
+    const [existingSku] = await pool.execute('SELECT * FROM inventory_items WHERE sku = ?', [sku]);
     if (existingSku.length > 0) {
       return res.status(400).json({ message: 'Item with this SKU already exists' });
     }
     
     // Insert new item
-    const [result] = await pool.query(
+    const [result] = await pool.execute(
       'INSERT INTO inventory_items (name, description, sku, barcode, quantity, price, cost, category, image_src) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [name, description || '', sku, barcode || '', quantity || 0, price, cost, category || '', imageSrc || '']
     );
@@ -518,14 +566,14 @@ app.post('/api/inventory/items', async (req, res) => {
     
     // If there's an initial quantity, create a beginning transaction
     if (quantity && quantity > 0) {
-      await pool.query(
+      await pool.execute(
         'INSERT INTO inventory_transactions (item_id, type, quantity, price, total_amount, notes) VALUES (?, ?, ?, ?, ?, ?)',
         [itemId, 'beginning', quantity, cost, cost * quantity, 'Initial inventory']
       );
     }
     
     // Get the newly created item
-    const [items] = await pool.query('SELECT * FROM inventory_items WHERE id = ?', [itemId]);
+    const [items] = await pool.execute('SELECT * FROM inventory_items WHERE id = ?', [itemId]);
     const item = items[0];
     
     // Format response
@@ -563,25 +611,25 @@ app.put('/api/inventory/items/:id', async (req, res) => {
     }
     
     // Check if item exists
-    const [existingItems] = await pool.query('SELECT * FROM inventory_items WHERE id = ?', [id]);
+    const [existingItems] = await pool.execute('SELECT * FROM inventory_items WHERE id = ?', [id]);
     if (existingItems.length === 0) {
       return res.status(404).json({ message: 'Item not found' });
     }
     
     // Check if SKU already exists (for another item)
-    const [existingSku] = await pool.query('SELECT * FROM inventory_items WHERE sku = ? AND id != ?', [sku, id]);
+    const [existingSku] = await pool.execute('SELECT * FROM inventory_items WHERE sku = ? AND id != ?', [sku, id]);
     if (existingSku.length > 0) {
       return res.status(400).json({ message: 'Another item with this SKU already exists' });
     }
     
     // Update item (don't update quantity here, that's handled via transactions)
-    await pool.query(
+    await pool.execute(
       'UPDATE inventory_items SET name = ?, description = ?, sku = ?, barcode = ?, price = ?, cost = ?, category = ?, image_src = ? WHERE id = ?',
       [name, description || '', sku, barcode || '', price, cost, category || '', imageSrc || '', id]
     );
     
     // Get updated item
-    const [items] = await pool.query('SELECT * FROM inventory_items WHERE id = ?', [id]);
+    const [items] = await pool.execute('SELECT * FROM inventory_items WHERE id = ?', [id]);
     const item = items[0];
     
     // Format response
@@ -613,13 +661,13 @@ app.delete('/api/inventory/items/:id', async (req, res) => {
     const { id } = req.params;
     
     // Check if item exists
-    const [existingItems] = await pool.query('SELECT * FROM inventory_items WHERE id = ?', [id]);
+    const [existingItems] = await pool.execute('SELECT * FROM inventory_items WHERE id = ?', [id]);
     if (existingItems.length === 0) {
       return res.status(404).json({ message: 'Item not found' });
     }
     
     // Delete item (transactions will be deleted via CASCADE)
-    await pool.query('DELETE FROM inventory_items WHERE id = ?', [id]);
+    await pool.execute('DELETE FROM inventory_items WHERE id = ?', [id]);
     
     res.json({ message: 'Item deleted successfully' });
   } catch (error) {
@@ -634,13 +682,13 @@ app.get('/api/inventory/items/:id/transactions', async (req, res) => {
     const { id } = req.params;
     
     // Check if item exists
-    const [existingItems] = await pool.query('SELECT * FROM inventory_items WHERE id = ?', [id]);
+    const [existingItems] = await pool.execute('SELECT * FROM inventory_items WHERE id = ?', [id]);
     if (existingItems.length === 0) {
       return res.status(404).json({ message: 'Item not found' });
     }
     
     // Get transactions
-    const [transactions] = await pool.query(`
+    const [transactions] = await pool.execute(`
       SELECT t.*, u.name as created_by_name
       FROM inventory_transactions t
       LEFT JOIN users u ON t.created_by = u.id
@@ -675,7 +723,7 @@ app.get('/api/inventory/items/:id/transactions', async (req, res) => {
 app.get('/api/inventory/transactions', async (req, res) => {
   try {
     // Get transactions with item and user info
-    const [transactions] = await pool.query(`
+    const [transactions] = await pool.execute(`
       SELECT t.*, i.name as item_name, i.sku as item_sku, u.name as created_by_name
       FROM inventory_transactions t
       JOIN inventory_items i ON t.item_id = i.id
@@ -720,7 +768,7 @@ app.post('/api/inventory/transactions', async (req, res) => {
     }
     
     // Check if item exists
-    const [existingItems] = await pool.query('SELECT * FROM inventory_items WHERE id = ?', [itemId]);
+    const [existingItems] = await pool.execute('SELECT * FROM inventory_items WHERE id = ?', [itemId]);
     if (existingItems.length === 0) {
       return res.status(404).json({ message: 'Item not found' });
     }
@@ -744,16 +792,16 @@ app.post('/api/inventory/transactions', async (req, res) => {
     const totalAmount = transactionPrice * quantity;
     
     // Create transaction
-    const [result] = await pool.query(
+    const [result] = await pool.execute(
       'INSERT INTO inventory_transactions (item_id, type, quantity, price, total_amount, notes, customer_supplier, payment_status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [itemId, type, quantity, transactionPrice, totalAmount, notes || '', customerSupplier || '', paymentStatus || '', 1] // Assuming user id 1 for now
     );
     
     // Update item quantity
-    await pool.query('UPDATE inventory_items SET quantity = ? WHERE id = ?', [newQuantity, itemId]);
+    await pool.execute('UPDATE inventory_items SET quantity = ? WHERE id = ?', [newQuantity, itemId]);
     
     // Get the newly created transaction
-    const [transactions] = await pool.query(`
+    const [transactions] = await pool.execute(`
       SELECT t.*, i.name as item_name, i.sku as item_sku, u.name as created_by_name
       FROM inventory_transactions t
       JOIN inventory_items i ON t.item_id = i.id
@@ -818,7 +866,7 @@ app.post('/api/inventory/bulk-transactions', async (req, res) => {
         }
         
         // Check if item exists
-        const [existingItems] = await connection.query('SELECT * FROM inventory_items WHERE id = ?', [itemId]);
+        const [existingItems] = await connection.execute('SELECT * FROM inventory_items WHERE id = ?', [itemId]);
         if (existingItems.length === 0) {
           throw new Error(`Item with ID ${itemId} not found`);
         }
@@ -842,16 +890,16 @@ app.post('/api/inventory/bulk-transactions', async (req, res) => {
         const totalAmount = transactionPrice * quantity;
         
         // Create transaction
-        const [result] = await connection.query(
+        const [result] = await connection.execute(
           'INSERT INTO inventory_transactions (item_id, type, quantity, price, total_amount, notes, customer_supplier, payment_status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
           [itemId, type, quantity, transactionPrice, totalAmount, notes || '', customerSupplier || '', paymentStatus || '', 1] // Assuming user id 1
         );
         
         // Update item quantity
-        await connection.query('UPDATE inventory_items SET quantity = ? WHERE id = ?', [newQuantity, itemId]);
+        await connection.execute('UPDATE inventory_items SET quantity = ? WHERE id = ?', [newQuantity, itemId]);
         
         // Get the newly created transaction
-        const [transactions] = await connection.query(`
+        const [transactions] = await connection.execute(`
           SELECT t.*, i.name as item_name, i.sku as item_sku
           FROM inventory_transactions t
           JOIN inventory_items i ON t.item_id = i.id
@@ -900,7 +948,7 @@ app.post('/api/inventory/bulk-transactions', async (req, res) => {
 // Get all sales
 app.get('/api/sales', async (req, res) => {
   try {
-    const [sales] = await pool.query(`
+    const [sales] = await pool.execute(`
       SELECT * FROM sales
       ORDER BY created_at DESC
     `);
@@ -921,7 +969,7 @@ app.get('/api/sales/by-date', async (req, res) => {
       return res.status(400).json({ error: 'Start date and end date are required' });
     }
     
-    const [sales] = await pool.query(`
+    const [sales] = await pool.execute(`
       SELECT * FROM sales
       WHERE created_at BETWEEN ? AND ?
       ORDER BY created_at DESC
@@ -940,7 +988,7 @@ app.get('/api/sales/:id', async (req, res) => {
     const { id } = req.params;
     
     // Get sale details
-    const [sales] = await pool.query(`
+    const [sales] = await pool.execute(`
       SELECT * FROM sales
       WHERE id = ?
     `, [id]);
@@ -952,7 +1000,7 @@ app.get('/api/sales/:id', async (req, res) => {
     const sale = sales[0];
     
     // Get sale items
-    const [saleItems] = await pool.query(`
+    const [saleItems] = await pool.execute(`
       SELECT si.*, i.name, i.sku, i.barcode
       FROM sale_items si
       JOIN inventory_items i ON si.item_id = i.id
@@ -1006,7 +1054,7 @@ app.post('/api/sales', async (req, res) => {
     }
     
     // Insert sale record
-    const [saleResult] = await connection2.query(`
+    const [saleResult] = await connection2.execute(`
       INSERT INTO sales 
       (subtotal, tax, discount, total, payment_method, customer_id, customer_name, customer_email, created_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1017,21 +1065,21 @@ app.post('/api/sales', async (req, res) => {
     // Insert each sale item and create inventory transactions
     for (const item of items) {
       // Add sale item
-      await connection2.query(`
+      await connection2.execute(`
         INSERT INTO sale_items 
         (sale_id, item_id, quantity, price, total)
         VALUES (?, ?, ?, ?, ?)
       `, [saleId, item.itemId, item.quantity, item.price, item.totalPrice]);
       
       // Update inventory quantity
-      await connection2.query(`
+      await connection2.execute(`
         UPDATE inventory_items
         SET quantity = quantity - ?
         WHERE id = ?
       `, [item.quantity, item.itemId]);
       
       // Create inventory transaction for the sale
-      await connection2.query(`
+      await connection2.execute(`
         INSERT INTO inventory_transactions 
         (item_id, type, quantity, price, total_amount, notes, created_by)
         VALUES (?, 'sale', ?, ?, ?, ?, ?)
@@ -1105,7 +1153,7 @@ app.get('/api/sales/summary', async (req, res) => {
     
     query += ` GROUP BY ${groupBy} ORDER BY created_at ASC`;
     
-    const [results] = await pool.query(query, queryParams);
+    const [results] = await pool.execute(query, queryParams);
     
     res.json(results);
   } catch (error) {
@@ -1117,7 +1165,7 @@ app.get('/api/sales/summary', async (req, res) => {
 // Get all users with their roles and permissions
 app.get('/api/users', authenticateToken, async (req, res) => {
   try {
-    const [users] = await pool.query(`
+    const [users] = await pool.execute(`
       SELECT 
         u.*,
         r.name as role_name,
@@ -1141,7 +1189,7 @@ app.get('/api/users', authenticateToken, async (req, res) => {
 // Get all roles with their permissions
 app.get('/api/roles', authenticateToken, async (req, res) => {
   try {
-    const [roles] = await pool.query(`
+    const [roles] = await pool.execute(`
       SELECT 
         r.*,
         GROUP_CONCAT(DISTINCT p.name) as permissions
@@ -1165,7 +1213,7 @@ app.put('/api/users/:id/role', authenticateToken, async (req, res) => {
     const { roleId } = req.body;
     const userId = req.params.id;
     
-    await pool.query(
+    await pool.execute(
       'UPDATE users SET role_id = ? WHERE id = ?',
       [roleId, userId]
     );
@@ -1190,7 +1238,7 @@ app.put('/api/roles/:id/permissions', authenticateToken, async (req, res) => {
       await connection.beginTransaction();
       
       // Remove existing permissions
-      await connection.query(
+      await connection.execute(
         'DELETE FROM role_permissions WHERE role_id = ?',
         [roleId]
       );
@@ -1198,7 +1246,7 @@ app.put('/api/roles/:id/permissions', authenticateToken, async (req, res) => {
       // Add new permissions
       if (permissions && permissions.length > 0) {
         const values = permissions.map(permissionId => [roleId, permissionId]);
-        await connection.query(
+        await connection.execute(
           'INSERT INTO role_permissions (role_id, permission_id) VALUES ?',
           [values]
         );
@@ -1224,12 +1272,12 @@ app.delete('/api/users/:id', authenticateToken, async (req, res) => {
     const userId = req.params.id;
     
     // Don't allow deleting the last admin
-    const [users] = await pool.query(
+    const [users] = await pool.execute(
       'SELECT COUNT(*) as count FROM users u JOIN roles r ON u.role_id = r.id WHERE r.name = "admin"'
     );
     
     if (users[0].count <= 1) {
-      const [userToDelete] = await pool.query(
+      const [userToDelete] = await pool.execute(
         'SELECT r.name as role_name FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?',
         [userId]
       );
@@ -1239,7 +1287,7 @@ app.delete('/api/users/:id', authenticateToken, async (req, res) => {
       }
     }
     
-    await pool.query('DELETE FROM users WHERE id = ?', [userId]);
+    await pool.execute('DELETE FROM users WHERE id = ?', [userId]);
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting user:', error);
@@ -1258,7 +1306,7 @@ app.post('/api/users', authenticateToken, async (req, res) => {
     }
     
     // Check if user already exists
-    const [existingUsers] = await pool.query(
+    const [existingUsers] = await pool.execute(
       'SELECT * FROM users WHERE email = ?',
       [email]
     );
@@ -1272,13 +1320,13 @@ app.post('/api/users', authenticateToken, async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, salt);
     
     // Create user
-    const [result] = await pool.query(
+    const [result] = await pool.execute(
       'INSERT INTO users (name, email, password, role_id) VALUES (?, ?, ?, ?)',
       [name, email, hashedPassword, role_id]
     );
     
     // Get created user with role and permissions
-    const [users] = await pool.query(`
+    const [users] = await pool.execute(`
       SELECT 
         u.*,
         r.name as role_name,
@@ -1326,7 +1374,7 @@ app.post('/api/users', authenticateToken, async (req, res) => {
 // Get all subscribers
 app.get('/api/subscribers', authenticateToken, async (req, res) => {
   try {
-    const [subscribers] = await pool.query(`
+    const [subscribers] = await pool.execute(`
       SELECT 
         s.*,
         COUNT(DISTINCT sub.id) as total_subscriptions,
@@ -1361,7 +1409,7 @@ app.post('/api/subscribers', authenticateToken, async (req, res) => {
     
     // Check if email already exists
     if (email) {
-      const [existingSubscribers] = await pool.query(
+      const [existingSubscribers] = await pool.execute(
         'SELECT * FROM subscribers WHERE email = ?',
         [email]
       );
@@ -1372,13 +1420,13 @@ app.post('/api/subscribers', authenticateToken, async (req, res) => {
     }
     
     // Insert new subscriber
-    const [result] = await pool.query(
+    const [result] = await pool.execute(
       'INSERT INTO subscribers (name, email, phone, address, date_of_birth, gender, emergency_contact, emergency_phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [name, email || null, phone || null, address || null, date_of_birth || null, gender || null, emergency_contact || null, emergency_phone || null]
     );
     
     // Get the newly created subscriber
-    const [subscribers] = await pool.query(`
+    const [subscribers] = await pool.execute(`
       SELECT 
         s.*,
         COUNT(DISTINCT sub.id) as total_subscriptions,
@@ -1413,14 +1461,14 @@ app.put('/api/subscribers/:id', authenticateToken, async (req, res) => {
     }
     
     // Check if subscriber exists
-    const [existingSubscribers] = await pool.query('SELECT * FROM subscribers WHERE id = ?', [id]);
+    const [existingSubscribers] = await pool.execute('SELECT * FROM subscribers WHERE id = ?', [id]);
     if (existingSubscribers.length === 0) {
       return res.status(404).json({ message: 'Subscriber not found' });
     }
     
     // Check if email already exists (for another subscriber)
     if (email) {
-      const [existingSubscribers] = await pool.query(
+      const [existingSubscribers] = await pool.execute(
         'SELECT * FROM subscribers WHERE email = ? AND id != ?',
         [email, id]
       );
@@ -1431,13 +1479,13 @@ app.put('/api/subscribers/:id', authenticateToken, async (req, res) => {
     }
     
     // Update subscriber
-    await pool.query(
+    await pool.execute(
       'UPDATE subscribers SET name = ?, email = ?, phone = ?, address = ?, date_of_birth = ?, gender = ?, emergency_contact = ?, emergency_phone = ? WHERE id = ?',
       [name, email || null, phone || null, address || null, date_of_birth || null, gender || null, emergency_contact || null, emergency_phone || null, id]
     );
     
     // Get updated subscriber
-    const [subscribers] = await pool.query(`
+    const [subscribers] = await pool.execute(`
       SELECT 
         s.*,
         COUNT(DISTINCT sub.id) as total_subscriptions,
@@ -1466,13 +1514,13 @@ app.delete('/api/subscribers/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
     
     // Check if subscriber exists
-    const [existingSubscribers] = await pool.query('SELECT * FROM subscribers WHERE id = ?', [id]);
+    const [existingSubscribers] = await pool.execute('SELECT * FROM subscribers WHERE id = ?', [id]);
     if (existingSubscribers.length === 0) {
       return res.status(404).json({ message: 'Subscriber not found' });
     }
     
     // Delete subscriber (subscriptions will be deleted via CASCADE)
-    await pool.query('DELETE FROM subscribers WHERE id = ?', [id]);
+    await pool.execute('DELETE FROM subscribers WHERE id = ?', [id]);
     
     res.json({ message: 'Subscriber deleted successfully' });
   } catch (error) {
@@ -1487,13 +1535,13 @@ app.get('/api/subscribers/:id/subscriptions', authenticateToken, async (req, res
     const { id } = req.params;
     
     // Check if subscriber exists
-    const [existingSubscribers] = await pool.query('SELECT * FROM subscribers WHERE id = ?', [id]);
+    const [existingSubscribers] = await pool.execute('SELECT * FROM subscribers WHERE id = ?', [id]);
     if (existingSubscribers.length === 0) {
       return res.status(404).json({ message: 'Subscriber not found' });
     }
     
     // Get subscriptions with package details
-    const [subscriptions] = await pool.query(`
+    const [subscriptions] = await pool.execute(`
       SELECT 
         sub.*,
         p.name as package_name,
@@ -1523,13 +1571,13 @@ app.post('/api/subscriptions', authenticateToken, async (req, res) => {
     }
     
     // Check if subscriber exists
-    const [existingSubscribers] = await pool.query('SELECT * FROM subscribers WHERE id = ?', [subscriber_id]);
+    const [existingSubscribers] = await pool.execute('SELECT * FROM subscribers WHERE id = ?', [subscriber_id]);
     if (existingSubscribers.length === 0) {
       return res.status(404).json({ message: 'Subscriber not found' });
     }
     
     // Get package details
-    const [packages] = await pool.query('SELECT * FROM packages WHERE id = ?', [package_id]);
+    const [packages] = await pool.execute('SELECT * FROM packages WHERE id = ?', [package_id]);
     if (packages.length === 0) {
       return res.status(404).json({ message: 'Package not found' });
     }
@@ -1541,13 +1589,13 @@ app.post('/api/subscriptions', authenticateToken, async (req, res) => {
     end_date.setDate(end_date.getDate() + pkg.days);
     
     // Insert subscription
-    const [result] = await pool.query(
+    const [result] = await pool.execute(
       'INSERT INTO subscriptions (subscriber_id, package_id, start_date, end_date, total_amount, payment_method, notes, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [subscriber_id, package_id, start_date, end_date, pkg.price, payment_method, notes || null, req.user.id]
     );
     
     // Get the newly created subscription with package details
-    const [subscriptions] = await pool.query(`
+    const [subscriptions] = await pool.execute(`
       SELECT 
         sub.*,
         p.name as package_name,
@@ -1570,11 +1618,11 @@ app.post('/api/subscriptions', authenticateToken, async (req, res) => {
 app.get('/api/dashboard/stats', authenticateToken, async (req, res) => {
   try {
     // Get total users
-    const [usersResult] = await pool.query('SELECT COUNT(*) as total FROM users');
+    const [usersResult] = await pool.execute('SELECT COUNT(*) as total FROM users');
     const totalUsers = usersResult[0].total;
 
     // Get total sales and revenue
-    const [salesResult] = await pool.query(`
+    const [salesResult] = await pool.execute(`
       SELECT 
         COUNT(*) as total_sales,
         COALESCE(SUM(total), 0) as total_revenue
@@ -1584,7 +1632,7 @@ app.get('/api/dashboard/stats', authenticateToken, async (req, res) => {
     const { total_sales, total_revenue } = salesResult[0];
 
     // Get total inventory items
-    const [inventoryResult] = await pool.query('SELECT COUNT(*) as total FROM inventory_items');
+    const [inventoryResult] = await pool.execute('SELECT COUNT(*) as total FROM inventory_items');
     const totalInventory = inventoryResult[0].total;
 
     res.json({
@@ -1603,7 +1651,7 @@ app.get('/api/dashboard/stats', authenticateToken, async (req, res) => {
 app.get('/api/dashboard/recent-activities', authenticateToken, async (req, res) => {
   try {
     // Get recent sales
-    const [sales] = await pool.query(`
+    const [sales] = await pool.execute(`
       SELECT 
         'sale' as type,
         created_at,
@@ -1617,7 +1665,7 @@ app.get('/api/dashboard/recent-activities', authenticateToken, async (req, res) 
     `);
 
     // Get recent inventory transactions
-    const [inventoryTransactions] = await pool.query(`
+    const [inventoryTransactions] = await pool.execute(`
       SELECT 
         'inventory' as type,
         t.created_at,
@@ -1646,7 +1694,7 @@ app.get('/api/dashboard/recent-activities', authenticateToken, async (req, res) 
 // Get sales by month
 app.get('/api/dashboard/sales-by-month', authenticateToken, async (req, res) => {
   try {
-    const [sales] = await pool.query(`
+    const [sales] = await pool.execute(`
       SELECT 
         DATE_FORMAT(created_at, '%Y-%m') as month,
         COUNT(*) as count,
@@ -1670,7 +1718,7 @@ app.get('/api/dashboard/sales-by-month', authenticateToken, async (req, res) => 
 // Get low stock items
 app.get('/api/dashboard/low-stock', authenticateToken, async (req, res) => {
   try {
-    const [items] = await pool.query(`
+    const [items] = await pool.execute(`
       SELECT 
         id,
         name,
@@ -1695,6 +1743,31 @@ app.get('/api/dashboard/low-stock', authenticateToken, async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({
+    status: 'error',
+    message: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+  });
+});
+
+// Start server with error handling
+const server = app.listen(PORT, HOST, () => {
+  console.log(`Server running at http://${HOST}:${PORT}`);
+}).on('error', (err) => {
+  console.error('Server failed to start:', err);
+  process.exit(1);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received. Shutting down gracefully...');
+  server.close(() => {
+    console.log('Server closed');
+    pool.end(() => {
+      console.log('Database connection closed.');
+      process.exit(0);
+    });
+  });
 }); 
