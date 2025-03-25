@@ -1056,6 +1056,9 @@ app.post('/api/sales', async (req, res) => {
   try {
     const { 
       items, 
+      subtotal, 
+      tax, 
+      discount = 0, 
       total, 
       paymentMethod,
       customer_id = null,
@@ -1069,7 +1072,7 @@ app.post('/api/sales', async (req, res) => {
       return res.status(400).json({ error: 'Sale must have at least one item' });
     }
     
-    if (!total || !paymentMethod) {
+    if (!subtotal || !tax || !total || !paymentMethod) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     
@@ -1078,7 +1081,7 @@ app.post('/api/sales', async (req, res) => {
       INSERT INTO sales 
       (subtotal, tax, discount, total, payment_method, customer_id, customer_name, customer_email, created_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [total, 0, 0, total, paymentMethod, customer_id, customer_name, customer_email, created_by]);
+    `, [subtotal, tax, discount, total, paymentMethod, customer_id, customer_name, customer_email, created_by]);
     
     const saleId = saleResult.insertId;
     
@@ -1156,6 +1159,8 @@ app.get('/api/sales/summary', async (req, res) => {
       SELECT 
         DATE_FORMAT(created_at, '${dateFormat}') as period,
         COUNT(*) as count,
+        SUM(subtotal) as subtotal,
+        SUM(tax) as tax,
         SUM(total) as total,
         SUM(CASE WHEN payment_method = 'cash' THEN total ELSE 0 END) as cash_total,
         SUM(CASE WHEN payment_method = 'card' THEN total ELSE 0 END) as card_total
@@ -1761,35 +1766,79 @@ app.get('/api/dashboard/low-stock', authenticateToken, async (req, res) => {
   }
 });
 
-// Get tax rate
-app.get('/api/settings/tax-rate', authenticateToken, async (req, res) => {
+// Get cash drawer balance
+app.get('/api/pos/drawer-balance', authenticateToken, async (req, res) => {
   try {
-    const [settings] = await pool.execute('SELECT tax_rate FROM settings WHERE id = 1');
-    if (settings.length === 0) {
-      // If no settings exist, create default settings
-      await pool.execute('INSERT INTO settings (id, tax_rate) VALUES (1, 10)');
-      return res.json({ taxRate: 10 });
-    }
-    res.json({ taxRate: settings[0].tax_rate });
+    const [result] = await pool.execute(`
+      SELECT COALESCE(SUM(
+        CASE 
+          WHEN type = 'sale' THEN total_amount
+          WHEN type = 'adjustment' THEN amount
+          ELSE 0
+        END
+      ), 0) as balance
+      FROM (
+        SELECT 'sale' as type, total as total_amount, 0 as amount
+        FROM sales
+        WHERE payment_method = 'cash'
+        UNION ALL
+        SELECT 'adjustment' as type, 0 as total_amount, amount
+        FROM drawer_adjustments
+      ) as transactions
+    `);
+    
+    res.json({ balance: parseFloat(result[0].balance) });
   } catch (error) {
-    console.error('Error fetching tax rate:', error);
+    console.error('Error fetching drawer balance:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
-// Update tax rate
-app.put('/api/settings/tax-rate', authenticateToken, async (req, res) => {
+// Create drawer adjustment
+app.post('/api/pos/drawer-adjustment', authenticateToken, async (req, res) => {
   try {
-    const { taxRate } = req.body;
+    const { amount, note } = req.body;
     
-    if (taxRate === undefined || taxRate < 0 || taxRate > 100) {
-      return res.status(400).json({ message: 'Invalid tax rate' });
+    if (amount === undefined || amount === null) {
+      return res.status(400).json({ message: 'Amount is required' });
     }
     
-    await pool.execute('UPDATE settings SET tax_rate = ? WHERE id = 1', [taxRate]);
-    res.json({ success: true });
+    // Insert drawer adjustment
+    const [result] = await pool.execute(
+      'INSERT INTO drawer_adjustments (amount, note, created_by) VALUES (?, ?, ?)',
+      [amount, note || '', req.user.id]
+    );
+    
+    res.status(201).json({ 
+      success: true, 
+      message: 'Drawer adjustment created successfully',
+      adjustmentId: result.insertId 
+    });
   } catch (error) {
-    console.error('Error updating tax rate:', error);
+    console.error('Error creating drawer adjustment:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get drawer adjustments history
+app.get('/api/pos/drawer-adjustments', authenticateToken, async (req, res) => {
+  try {
+    const [adjustments] = await pool.execute(`
+      SELECT 
+        da.*,
+        u.name as created_by_name
+      FROM drawer_adjustments da
+      LEFT JOIN users u ON da.created_by = u.id
+      ORDER BY da.created_at DESC
+      LIMIT 50
+    `);
+    
+    res.json(adjustments.map(adj => ({
+      ...adj,
+      amount: parseFloat(adj.amount)
+    })));
+  } catch (error) {
+    console.error('Error fetching drawer adjustments:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
