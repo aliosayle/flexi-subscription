@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { CashDrawer } from '@/components/CashDrawer';
 
 interface DashboardStats {
   totalUsers: number;
@@ -159,9 +160,9 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* Recent Activities and Low Stock Items */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
+      {/* Recent Activities, Low Stock Items, and Cash Drawer */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="md:col-span-1">
           <CardHeader>
             <CardTitle>Recent Activities</CardTitle>
           </CardHeader>
@@ -211,7 +212,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="md:col-span-1">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-yellow-500" />
@@ -237,6 +238,8 @@ export default function Dashboard() {
             </div>
           </CardContent>
         </Card>
+
+        <CashDrawer />
       </div>
     </div>
   );

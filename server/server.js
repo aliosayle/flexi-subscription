@@ -1754,6 +1754,89 @@ app.get('/api/dashboard/low-stock', authenticateToken, async (req, res) => {
   }
 });
 
+// Cash Drawer Routes
+// Get current balance
+app.get('/api/cash-drawer/balance', authenticateToken, async (req, res) => {
+  try {
+    const [result] = await pool.execute(`
+      SELECT COALESCE(SUM(
+        CASE 
+          WHEN type IN ('add', 'sale') THEN amount
+          WHEN type IN ('remove', 'reset') THEN -amount
+        END
+      ), 0) as balance
+      FROM cash_drawer_transactions
+    `);
+    
+    res.json({ balance: parseFloat(result[0].balance) });
+  } catch (error) {
+    console.error('Error fetching cash drawer balance:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get transaction history
+app.get('/api/cash-drawer/transactions', authenticateToken, async (req, res) => {
+  try {
+    const [transactions] = await pool.execute(`
+      SELECT 
+        t.*,
+        u.name as created_by_name
+      FROM cash_drawer_transactions t
+      LEFT JOIN users u ON t.created_by = u.id
+      ORDER BY t.created_at DESC
+      LIMIT 50
+    `);
+    
+    res.json(transactions.map(t => ({
+      id: t.id,
+      type: t.type,
+      amount: parseFloat(t.amount),
+      notes: t.notes,
+      created_at: t.created_at,
+      created_by: t.created_by_name || 'System'
+    })));
+  } catch (error) {
+    console.error('Error fetching cash drawer transactions:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Create transaction
+app.post('/api/cash-drawer/transactions', authenticateToken, async (req, res) => {
+  try {
+    const { type, amount, notes } = req.body;
+    
+    // Validate required fields
+    if (!type || !amount || amount <= 0) {
+      return res.status(400).json({ message: 'Missing or invalid required fields' });
+    }
+    
+    // Validate transaction type
+    if (!['add', 'remove', 'reset'].includes(type)) {
+      return res.status(400).json({ message: 'Invalid transaction type' });
+    }
+    
+    // Insert transaction
+    const [result] = await pool.execute(
+      'INSERT INTO cash_drawer_transactions (type, amount, notes, created_by) VALUES (?, ?, ?, ?)',
+      [type, amount, notes || null, req.user.id]
+    );
+    
+    res.status(201).json({
+      id: result.insertId,
+      type,
+      amount: parseFloat(amount),
+      notes,
+      created_at: new Date(),
+      created_by: req.user.name
+    });
+  } catch (error) {
+    console.error('Error creating cash drawer transaction:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
