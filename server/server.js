@@ -908,10 +908,10 @@ app.post('/api/inventory/bulk-transactions', async (req, res) => {
         const transactionPrice = price || (type === 'sale' ? inventoryItem.price : inventoryItem.cost);
         const totalAmount = transactionPrice * quantity;
         
-        // Create transaction
+        // Create transaction with null created_by
         const [result] = await connection.execute(
-          'INSERT INTO inventory_transactions (item_id, type, quantity, price, total_amount, notes, customer_supplier, payment_status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [itemId, type, quantity, transactionPrice, totalAmount, notes || '', customerSupplier || '', paymentStatus || '', 1] // Assuming user id 1 for now
+          'INSERT INTO inventory_transactions (item_id, type, quantity, price, total_amount, notes, customer_supplier, payment_status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)',
+          [itemId, type, quantity, transactionPrice, totalAmount, notes || '', customerSupplier || '', paymentStatus || '']
         );
         
         // Update item quantity
@@ -958,7 +958,11 @@ app.post('/api/inventory/bulk-transactions', async (req, res) => {
     }
   } catch (error) {
     console.error('Error creating bulk inventory transaction:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message,
+      details: error.stack 
+    });
   }
 });
 
