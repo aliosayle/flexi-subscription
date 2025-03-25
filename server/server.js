@@ -1030,88 +1030,49 @@ app.get('/api/sales/:id', async (req, res) => {
 });
 
 // Create a new sale
-app.post('/api/sales', async (req, res) => {
-  // Start a transaction to ensure all operations succeed or fail together
-  const connection2 = await mysql.createConnection({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: 'flexigym'
-  });
-  
-  await connection2.beginTransaction();
-  
+app.post('/api/sales', authenticateToken, async (req, res) => {
+  const connection = await pool.getConnection();
   try {
-    const { 
-      items, 
-      subtotal, 
-      tax, 
-      discount = 0, 
-      total, 
-      paymentMethod,
-      customer_id = null,
-      customer_name = null,
-      customer_email = null,
-      created_by = null
-    } = req.body;
-    
-    // Validate required fields
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: 'Sale must have at least one item' });
-    }
-    
-    if (!subtotal || !tax || !total || !paymentMethod) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-    
-    // Insert sale record
-    const [saleResult] = await connection2.execute(`
-      INSERT INTO sales 
-      (subtotal, tax, discount, total, payment_method, customer_id, customer_name, customer_email, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [subtotal, tax, discount, total, paymentMethod, customer_id, customer_name, customer_email, created_by]);
-    
+    await connection.beginTransaction();
+
+    const { items, total, payment_method, customer_id } = req.body;
+
+    // Insert sale
+    const [saleResult] = await connection.execute(
+      'INSERT INTO sales (total, payment_method, customer_id, created_by) VALUES (?, ?, ?, ?)',
+      [total, payment_method, customer_id, req.user.id]
+    );
     const saleId = saleResult.insertId;
-    
-    // Insert each sale item and create inventory transactions
+
+    // Insert sale items and update inventory
     for (const item of items) {
-      // Add sale item
-      await connection2.execute(`
-        INSERT INTO sale_items 
-        (sale_id, item_id, quantity, price, total)
-        VALUES (?, ?, ?, ?, ?)
-      `, [saleId, item.itemId, item.quantity, item.price, item.totalPrice]);
-      
-      // Update inventory quantity
-      await connection2.execute(`
-        UPDATE inventory_items
-        SET quantity = quantity - ?
-        WHERE id = ?
-      `, [item.quantity, item.itemId]);
-      
-      // Create inventory transaction for the sale
-      await connection2.execute(`
-        INSERT INTO inventory_transactions 
-        (item_id, type, quantity, price, total_amount, notes, created_by)
-        VALUES (?, 'sale', ?, ?, ?, ?, ?)
-      `, [item.itemId, item.quantity, item.price, item.totalPrice, `Sale ID: ${saleId}`, created_by]);
+      await connection.execute(
+        'INSERT INTO sale_items (sale_id, item_id, quantity, price) VALUES (?, ?, ?, ?)',
+        [saleId, item.id, item.quantity, item.price]
+      );
+
+      await connection.execute(
+        'UPDATE inventory_items SET quantity = quantity - ? WHERE id = ?',
+        [item.quantity, item.id]
+      );
     }
-    
-    // Commit the transaction
-    await connection2.commit();
-    
-    res.status(201).json({ 
-      success: true, 
-      message: 'Sale created successfully',
-      saleId 
-    });
+
+    // Record cash drawer transaction if payment is cash
+    if (payment_method === 'cash') {
+      await connection.execute(
+        'INSERT INTO cash_drawer_transactions (type, amount, notes, created_by) VALUES (?, ?, ?, ?)',
+        ['sale', total, `Sale #${saleId}`, req.user.id]
+      );
+    }
+
+    await connection.commit();
+    res.status(201).json({ id: saleId, message: 'Sale created successfully' });
   } catch (error) {
-    // Rollback if there's an error
-    await connection2.rollback();
+    await connection.rollback();
     console.error('Error creating sale:', error);
-    res.status(500).json({ error: 'Failed to create sale' });
+    res.status(500).json({ message: 'Server error', error: error.message });
   } finally {
-    connection2.end();
+    connection.release();
   }
 });
 
@@ -1410,53 +1371,41 @@ app.get('/api/subscribers', authenticateToken, async (req, res) => {
 
 // Create subscriber
 app.post('/api/subscribers', authenticateToken, async (req, res) => {
+  const connection = await pool.getConnection();
   try {
-    const { name, email, phone, address, date_of_birth, gender, emergency_contact, emergency_phone } = req.body;
-    
-    // Validate required fields
-    if (!name) {
-      return res.status(400).json({ message: 'Name is required' });
-    }
-    
-    // Check if email already exists
-    if (email) {
-      const [existingSubscribers] = await pool.execute(
-        'SELECT * FROM subscribers WHERE email = ?',
-        [email]
-      );
-      
-      if (existingSubscribers.length > 0) {
-        return res.status(400).json({ message: 'Email already exists' });
-      }
-    }
-    
-    // Insert new subscriber
-    const [result] = await pool.execute(
-      'INSERT INTO subscribers (name, email, phone, address, date_of_birth, gender, emergency_contact, emergency_phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [name, email || null, phone || null, address || null, date_of_birth || null, gender || null, emergency_contact || null, emergency_phone || null]
+    await connection.beginTransaction();
+
+    const { name, email, phone, subscription_type, payment_method, amount } = req.body;
+
+    // Insert subscriber
+    const [subscriberResult] = await connection.execute(
+      'INSERT INTO subscribers (name, email, phone, subscription_type, created_by) VALUES (?, ?, ?, ?, ?)',
+      [name, email, phone, subscription_type, req.user.id]
     );
-    
-    // Get the newly created subscriber
-    const [subscribers] = await pool.execute(`
-      SELECT 
-        s.*,
-        COUNT(DISTINCT sub.id) as total_subscriptions,
-        MAX(sub.end_date) as latest_end_date,
-        CASE 
-          WHEN MAX(sub.end_date) > CURRENT_DATE THEN 'active'
-          WHEN MAX(sub.end_date) < CURRENT_DATE THEN 'expired'
-          ELSE 'no_subscription'
-        END as current_status
-      FROM subscribers s
-      LEFT JOIN subscriptions sub ON s.id = sub.subscriber_id
-      WHERE s.id = ?
-      GROUP BY s.id
-    `, [result.insertId]);
-    
-    res.status(201).json(subscribers[0]);
+    const subscriberId = subscriberResult.insertId;
+
+    // Record payment
+    await connection.execute(
+      'INSERT INTO payments (subscriber_id, amount, payment_method, created_by) VALUES (?, ?, ?, ?)',
+      [subscriberId, amount, payment_method, req.user.id]
+    );
+
+    // Record cash drawer transaction if payment is cash
+    if (payment_method === 'cash') {
+      await connection.execute(
+        'INSERT INTO cash_drawer_transactions (type, amount, notes, created_by) VALUES (?, ?, ?, ?)',
+        ['sale', amount, `New subscriber payment - ${name}`, req.user.id]
+      );
+    }
+
+    await connection.commit();
+    res.status(201).json({ id: subscriberId, message: 'Subscriber created successfully' });
   } catch (error) {
+    await connection.rollback();
     console.error('Error creating subscriber:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
+  } finally {
+    connection.release();
   }
 });
 
