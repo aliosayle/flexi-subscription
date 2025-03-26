@@ -104,6 +104,7 @@ export default function Companies() {
   };
 
   const handleEdit = (company: Company) => {
+    setEditingCompany(company);
     setFormData({
       name: company.name,
       registration_number: company.registration_number,
