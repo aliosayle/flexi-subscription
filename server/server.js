@@ -12,38 +12,23 @@ const morgan = require('morgan');
 const { body, validationResult } = require('express-validator');
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
 
-// Create uploads directory if it doesn't exist
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir);
-}
-
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadsDir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-const upload = multer({ 
+// Multer configuration for file uploads
+const storage = multer.memoryStorage();
+const upload = multer({
   storage: storage,
   limits: {
     fileSize: 5 * 1024 * 1024 // 5MB limit
   },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+    if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Only image files are allowed!'));
+      cb(new Error('Invalid file type. Only JPEG, PNG and GIF are allowed.'));
     }
   }
 });
@@ -1791,11 +1776,7 @@ app.get('/api/dashboard/low-stock', authenticateToken, async (req, res) => {
 // Companies routes
 app.get('/api/companies', authenticateToken, async (req, res) => {
   try {
-    const [companies] = await pool.query(`
-      SELECT id, name, registration_number, vat_number, address, id_nat, logo, created_at, updated_at 
-      FROM companies 
-      ORDER BY name
-    `);
+    const [companies] = await pool.query('SELECT * FROM companies ORDER BY created_at DESC');
     res.json(companies);
   } catch (error) {
     console.error('Error fetching companies:', error);
@@ -1803,58 +1784,16 @@ app.get('/api/companies', authenticateToken, async (req, res) => {
   }
 });
 
-// Get company logo
-app.get('/api/companies/:id/logo', authenticateToken, async (req, res) => {
+app.post('/api/companies', authenticateToken, upload.single('logo'), async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT logo FROM companies WHERE id = ?', [req.params.id]);
-    if (rows.length === 0) {
-      return res.status(404).json({ error: 'Company not found' });
-    }
-    const company = rows[0];
-    if (!company.logo) {
-      return res.status(404).json({ error: 'No logo found' });
-    }
-    
-    // Set appropriate headers for image display
-    res.setHeader('Content-Type', 'image/jpeg');
-    res.setHeader('Cache-Control', 'public, max-age=31536000');
-    
-    // Send the BLOB data directly
-    res.send(company.logo);
-  } catch (error) {
-    console.error('Error fetching company logo:', error);
-    res.status(500).json({ error: 'Failed to fetch company logo' });
-  }
-});
-
-// Create company
-app.post('/api/companies', authenticateToken, async (req, res) => {
-  try {
-    console.log('Received company creation request');
-    console.log('Request body:', req.body);
-    console.log('Request files:', req.files);
-
-    const { name, registration_number, vat_number, address, id_nat } = req.body;
-    const logo = req.files?.logo ? req.files.logo.data : null;
-
-    // Validate required fields
-    if (!name) {
-      return res.status(400).json({ error: 'Company name is required' });
-    }
-
-    console.log('Creating company with data:', {
-      name,
-      registration_number,
-      vat_number,
-      address,
-      id_nat,
-      hasLogo: !!logo
-    });
+    const { name, registration_number, vat_number, address, id_net } = req.body;
+    const logo = req.file ? req.file.buffer : null;
 
     const [result] = await pool.query(
-      'INSERT INTO companies (name, registration_number, vat_number, address, id_nat, logo) VALUES (?, ?, ?, ?, ?, ?)',
-      [name, registration_number, vat_number, address, id_nat, logo]
+      'INSERT INTO companies (name, registration_number, vat_number, address, id_net, logo) VALUES (?, ?, ?, ?, ?, ?)',
+      [name, registration_number, vat_number, address, id_net, logo]
     );
+
     res.status(201).json({ id: result.insertId, message: 'Company created successfully' });
   } catch (error) {
     console.error('Error creating company:', error);
@@ -1862,41 +1801,25 @@ app.post('/api/companies', authenticateToken, async (req, res) => {
   }
 });
 
-// Update company
-app.put('/api/companies/:id', authenticateToken, async (req, res) => {
+app.put('/api/companies/:id', authenticateToken, upload.single('logo'), async (req, res) => {
   try {
-    console.log('Received company update request for ID:', req.params.id);
-    console.log('Request body:', req.body);
-    console.log('Request files:', req.files);
+    const { id } = req.params;
+    const { name, registration_number, vat_number, address, id_net } = req.body;
+    const logo = req.file ? req.file.buffer : null;
 
-    const { name, registration_number, vat_number, address, id_nat } = req.body;
-    const logo = req.files?.logo ? req.files.logo.data : null;
-
-    // Validate required fields
-    if (!name) {
-      return res.status(400).json({ error: 'Company name is required' });
-    }
-
-    console.log('Updating company with data:', {
-      name,
-      registration_number,
-      vat_number,
-      address,
-      id_nat,
-      hasLogo: !!logo
-    });
+    let query = 'UPDATE companies SET name = ?, registration_number = ?, vat_number = ?, address = ?, id_net = ?';
+    let params = [name, registration_number, vat_number, address, id_net];
 
     if (logo) {
-      await pool.query(
-        'UPDATE companies SET name = ?, registration_number = ?, vat_number = ?, address = ?, id_nat = ?, logo = ? WHERE id = ?',
-        [name, registration_number, vat_number, address, id_nat, logo, req.params.id]
-      );
-    } else {
-      await pool.query(
-        'UPDATE companies SET name = ?, registration_number = ?, vat_number = ?, address = ?, id_nat = ? WHERE id = ?',
-        [name, registration_number, vat_number, address, id_nat, req.params.id]
-      );
+      query += ', logo = ?';
+      params.push(logo);
     }
+
+    query += ' WHERE id = ?';
+    params.push(id);
+
+    await pool.query(query, params);
+
     res.json({ message: 'Company updated successfully' });
   } catch (error) {
     console.error('Error updating company:', error);
@@ -1904,34 +1827,16 @@ app.put('/api/companies/:id', authenticateToken, async (req, res) => {
   }
 });
 
-app.delete('/api/companies/:id', async (req, res) => {
+app.delete('/api/companies/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-
-    // Get the logo filename before deleting the company
-    const [company] = await pool.query('SELECT logo FROM companies WHERE id = ?', [id]);
-    const logo = company[0]?.logo;
-
-    // Delete the company
     await pool.query('DELETE FROM companies WHERE id = ?', [id]);
-
-    // Delete the logo file if it exists
-    if (logo) {
-      const logoPath = path.join(uploadsDir, logo);
-      if (fs.existsSync(logoPath)) {
-        fs.unlinkSync(logoPath);
-      }
-    }
-
     res.json({ message: 'Company deleted successfully' });
   } catch (error) {
     console.error('Error deleting company:', error);
     res.status(500).json({ error: 'Failed to delete company' });
   }
 });
-
-// Serve uploaded files
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Error handling middleware
 app.use((err, req, res, next) => {

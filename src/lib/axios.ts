@@ -1,19 +1,14 @@
 import axios from 'axios';
 
+const API_BASE_URL = 'http://192.168.10.70:5000';
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+  baseURL: API_BASE_URL,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
+    'Accept': 'application/json'
   },
-  withCredentials: true,
-});
-
-// Add request interceptor to handle form data
-api.interceptors.request.use((config) => {
-  if (config.data instanceof FormData) {
-    config.headers['Content-Type'] = 'multipart/form-data';
-  }
-  return config;
 });
 
 // Add a request interceptor to add the auth token
