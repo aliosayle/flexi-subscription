@@ -183,12 +183,8 @@ const POS = () => {
     return cartItems.reduce((total, item) => total + item.totalPrice, 0);
   };
 
-  const calculateTax = () => {
-    return calculateSubtotal() * 0.1; // 10% tax
-  };
-
   const calculateTotal = () => {
-    return calculateSubtotal() + calculateTax();
+    return calculateSubtotal(); // No tax, price is all-inclusive
   };
 
   const handleCheckout = async () => {
@@ -206,7 +202,7 @@ const POS = () => {
           totalPrice: item.totalPrice
         })),
         subtotal: calculateSubtotal(),
-        tax: calculateTax(),
+        tax: 0, // No tax, price is all-inclusive
         discount: 0,
         total: calculateTotal(),
         paymentMethod: paymentMethod,
@@ -227,184 +223,183 @@ const POS = () => {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Left Column - Product Search and Selection */}
-        <div className="lg:col-span-2 space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle>Point of Sale</CardTitle>
-              <CardDescription>
-                Scan barcode or search for products to add to cart.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Barcode Scanner */}
-              <form onSubmit={handleBarcodeSearch} className="flex gap-2">
-                <div className="relative flex-1">
-                  <Barcode className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+      <div className="grid grid-cols-1 gap-4">
+        {/* Product Search and Cart in same row */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* Left Column - Product Search */}
+          <div className="lg:col-span-8">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle>Point of Sale</CardTitle>
+                <CardDescription>
+                  Scan barcode or search for products to add to cart.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Barcode Scanner */}
+                <form onSubmit={handleBarcodeSearch} className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Barcode className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      ref={barcodeInputRef}
+                      placeholder="Scan barcode..."
+                      className="pl-9"
+                    />
+                  </div>
+                  <Button type="submit" variant="default">
+                    Add
+                  </Button>
+                </form>
+                
+                {/* Product Search */}
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
-                    ref={barcodeInputRef}
-                    placeholder="Scan barcode..."
+                    placeholder="Search products..."
                     className="pl-9"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
                   />
                 </div>
-                <Button type="submit" variant="default">
-                  Add
-                </Button>
-              </form>
-              
-              {/* Product Search */}
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search products..."
-                  className="pl-9"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
           
-          {/* Product Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-            {loading ? (
-              <div className="col-span-full text-center py-10">
-                <p>Loading inventory items...</p>
-              </div>
-            ) : filteredItems.length === 0 ? (
-              <div className="col-span-full text-center py-10">
-                <p>No products found</p>
-              </div>
-            ) : (
-              filteredItems.map((item) => (
-                <Card 
-                  key={item.id} 
-                  className={cn(
-                    "cursor-pointer hover:shadow-md transition-all duration-200",
-                    "hover:translate-y-[-2px]",
-                    item.quantity <= 0 && "opacity-50"
-                  )}
-                  onClick={() => handleAddToCart(item)}
+          {/* Right Column - Shopping Cart */}
+          <div className="lg:col-span-4">
+            <Card className="sticky top-20">
+              <CardHeader className="pb-3">
+                <div className="flex justify-between items-center">
+                  <CardTitle className="flex items-center">
+                    <ShoppingCart className="mr-2 h-5 w-5" />
+                    Cart
+                  </CardTitle>
+                  <span className="text-muted-foreground text-sm">
+                    {cartItems.length} {cartItems.length === 1 ? 'item' : 'items'}
+                  </span>
+                </div>
+              </CardHeader>
+              <CardContent className="max-h-[400px] overflow-y-auto">
+                {cartItems.length === 0 ? (
+                  <div className="text-center py-4 text-muted-foreground">
+                    <Package className="mx-auto h-8 w-8 mb-2 opacity-50" />
+                    <p>Your cart is empty</p>
+                    <p className="text-xs mt-1">Scan or search for products to add them to your cart.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {cartItems.map((item) => (
+                      <div key={item.id} className="flex items-center justify-between border-b pb-3">
+                        <div className="space-y-1">
+                          <p className="font-medium">{item.name}</p>
+                          <p className="text-sm text-muted-foreground">${item.price.toFixed(2)} each</p>
+                        </div>
+                        
+                        <div className="flex items-center space-x-2">
+                          <div className="flex items-center border rounded-md">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 rounded-none"
+                              onClick={() => handleUpdateQuantity(item.id, -1)}
+                            >
+                              <Minus className="h-3 w-3" />
+                            </Button>
+                            <span className="w-8 text-center font-medium">{item.quantity}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 rounded-none"
+                              onClick={() => handleUpdateQuantity(item.id, 1)}
+                            >
+                              <Plus className="h-3 w-3" />
+                            </Button>
+                          </div>
+                          
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleRemoveFromCart(item.id)}
+                          >
+                            <XCircle className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+              
+              <CardFooter className="flex flex-col">
+                <div className="w-full space-y-2 mb-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Subtotal</span>
+                    <span>${calculateSubtotal().toFixed(2)}</span>
+                  </div>
+                  <Separator />
+                  <div className="flex justify-between items-center font-bold text-lg">
+                    <span>Total</span>
+                    <span>${calculateTotal().toFixed(2)}</span>
+                  </div>
+                </div>
+                
+                <Button 
+                  className="w-full" 
+                  size="lg"
+                  disabled={cartItems.length === 0 || loading}
+                  onClick={() => setIsCheckoutDialogOpen(true)}
                 >
-                  <CardContent className="p-3 text-center">
-                    <div className="aspect-square mb-2 bg-muted rounded-md flex items-center justify-center overflow-hidden">
-                      <img 
-                        src={item.imageSrc || 'https://placehold.co/100x100'} 
-                        alt={item.name} 
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <p className="font-medium text-sm truncate">{item.name}</p>
-                      <p className="text-muted-foreground text-xs">{item.sku}</p>
-                      <p className="font-bold">${item.price.toFixed(2)}</p>
-                      <p className="text-xs text-muted-foreground">Stock: {item.quantity}</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
+                  <ShoppingCart className="mr-2 h-4 w-4" />
+                  Checkout
+                </Button>
+              </CardFooter>
+            </Card>
           </div>
         </div>
         
-        {/* Right Column - Shopping Cart */}
-        <div className="lg:col-span-1">
-          <Card className="sticky top-20">
-            <CardHeader className="pb-3">
-              <div className="flex justify-between items-center">
-                <CardTitle className="flex items-center">
-                  <ShoppingCart className="mr-2 h-5 w-5" />
-                  Cart
-                </CardTitle>
-                <span className="text-muted-foreground text-sm">
-                  {cartItems.length} {cartItems.length === 1 ? 'item' : 'items'}
-                </span>
-              </div>
-            </CardHeader>
-            <CardContent className="max-h-[400px] overflow-y-auto">
-              {cartItems.length === 0 ? (
-                <div className="text-center py-4 text-muted-foreground">
-                  <Package className="mx-auto h-8 w-8 mb-2 opacity-50" />
-                  <p>Your cart is empty</p>
-                  <p className="text-xs mt-1">Scan or search for products to add them to your cart.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {cartItems.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between border-b pb-3">
-                      <div className="space-y-1">
-                        <p className="font-medium">{item.name}</p>
-                        <p className="text-sm text-muted-foreground">${item.price.toFixed(2)} each</p>
-                      </div>
-                      
-                      <div className="flex items-center space-x-2">
-                        <div className="flex items-center border rounded-md">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 rounded-none"
-                            onClick={() => handleUpdateQuantity(item.id, -1)}
-                          >
-                            <Minus className="h-3 w-3" />
-                          </Button>
-                          <span className="w-8 text-center font-medium">{item.quantity}</span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 rounded-none"
-                            onClick={() => handleUpdateQuantity(item.id, 1)}
-                          >
-                            <Plus className="h-3 w-3" />
-                          </Button>
-                        </div>
-                        
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => handleRemoveFromCart(item.id)}
-                        >
-                          <XCircle className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-            
-            <CardFooter className="flex flex-col">
-              <div className="w-full space-y-2 mb-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Subtotal</span>
-                  <span>${calculateSubtotal().toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Tax (10%)</span>
-                  <span>${calculateTax().toFixed(2)}</span>
-                </div>
-                <Separator />
-                <div className="flex justify-between items-center font-bold text-lg">
-                  <span>Total</span>
-                  <span>${calculateTotal().toFixed(2)}</span>
-                </div>
-              </div>
-              
-              <Button 
-                className="w-full" 
-                size="lg"
-                disabled={cartItems.length === 0 || loading}
-                onClick={() => setIsCheckoutDialogOpen(true)}
+        {/* Product Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          {loading ? (
+            <div className="col-span-full text-center py-10">
+              <p>Loading inventory items...</p>
+            </div>
+          ) : filteredItems.length === 0 ? (
+            <div className="col-span-full text-center py-10">
+              <p>No products found</p>
+            </div>
+          ) : (
+            filteredItems.map((item) => (
+              <Card 
+                key={item.id} 
+                className={cn(
+                  "cursor-pointer hover:shadow-md transition-all duration-200",
+                  "hover:translate-y-[-2px]",
+                  item.quantity <= 0 && "opacity-50"
+                )}
+                onClick={() => handleAddToCart(item)}
               >
-                <ShoppingCart className="mr-2 h-4 w-4" />
-                Checkout
-              </Button>
-            </CardFooter>
-          </Card>
+                <CardContent className="p-3 text-center">
+                  <div className="aspect-square mb-2 bg-muted rounded-md flex items-center justify-center overflow-hidden">
+                    <img 
+                      src={item.imageSrc || 'https://placehold.co/100x100'} 
+                      alt={item.name} 
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="font-medium text-sm truncate">{item.name}</p>
+                    <p className="text-muted-foreground text-xs">{item.sku}</p>
+                    <p className="font-bold">${item.price.toFixed(2)}</p>
+                    <p className="text-xs text-muted-foreground">Stock: {item.quantity}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )}
         </div>
       </div>
       
@@ -429,15 +424,7 @@ const POS = () => {
               <h3 className="font-medium mb-2">Order Summary</h3>
               <div className="space-y-1">
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Subtotal:</span>
-                  <span>${calculateSubtotal().toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Tax (10%):</span>
-                  <span>${calculateTax().toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between font-bold mt-2">
-                  <span>Total:</span>
+                  <span className="text-muted-foreground">Total (Tax Included):</span>
                   <span>${calculateTotal().toFixed(2)}</span>
                 </div>
               </div>
