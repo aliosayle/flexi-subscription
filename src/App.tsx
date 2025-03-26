@@ -18,6 +18,7 @@ import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import Subscribers from "@/pages/Subscribers";
 import SalesReport from "@/pages/SalesReport";
+import Companies from './pages/Companies';
 
 const queryClient = new QueryClient();
 
@@ -120,6 +121,13 @@ const AppWithProviders = () => (
             </ProtectedRoute>
           } 
         />
+        <Route path="/companies" element={
+          <ProtectedRoute>
+            <MainLayout>
+              <Companies />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
 
         {/* Catch all route */}
         <Route path="*" element={<NotFound />} />

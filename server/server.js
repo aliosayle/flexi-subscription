@@ -1754,6 +1754,71 @@ app.get('/api/dashboard/low-stock', authenticateToken, async (req, res) => {
   }
 });
 
+// Companies routes
+app.get('/api/companies', authenticateToken, async (req, res) => {
+  try {
+    const [companies] = await pool.query('SELECT * FROM companies ORDER BY created_at DESC');
+    res.json(companies);
+  } catch (error) {
+    console.error('Error fetching companies:', error);
+    res.status(500).json({ error: 'Failed to fetch companies' });
+  }
+});
+
+app.post('/api/companies', authenticateToken, upload.single('logo'), async (req, res) => {
+  try {
+    const { name, registration_number, vat_number, address, id_net } = req.body;
+    const logo = req.file ? req.file.buffer : null;
+
+    const [result] = await pool.query(
+      'INSERT INTO companies (name, registration_number, vat_number, address, id_net, logo) VALUES (?, ?, ?, ?, ?, ?)',
+      [name, registration_number, vat_number, address, id_net, logo]
+    );
+
+    res.status(201).json({ id: result.insertId, message: 'Company created successfully' });
+  } catch (error) {
+    console.error('Error creating company:', error);
+    res.status(500).json({ error: 'Failed to create company' });
+  }
+});
+
+app.put('/api/companies/:id', authenticateToken, upload.single('logo'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, registration_number, vat_number, address, id_net } = req.body;
+    const logo = req.file ? req.file.buffer : null;
+
+    let query = 'UPDATE companies SET name = ?, registration_number = ?, vat_number = ?, address = ?, id_net = ?';
+    let params = [name, registration_number, vat_number, address, id_net];
+
+    if (logo) {
+      query += ', logo = ?';
+      params.push(logo);
+    }
+
+    query += ' WHERE id = ?';
+    params.push(id);
+
+    await pool.query(query, params);
+
+    res.json({ message: 'Company updated successfully' });
+  } catch (error) {
+    console.error('Error updating company:', error);
+    res.status(500).json({ error: 'Failed to update company' });
+  }
+});
+
+app.delete('/api/companies/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query('DELETE FROM companies WHERE id = ?', [id]);
+    res.json({ message: 'Company deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting company:', error);
+    res.status(500).json({ error: 'Failed to delete company' });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
