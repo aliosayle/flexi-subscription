@@ -47,10 +47,12 @@ export default function Companies() {
   const fetchCompanies = async () => {
     try {
       const response = await api.get('/api/companies');
-      setCompanies(response.data);
+      // Ensure we're setting an array
+      setCompanies(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error('Error fetching companies:', error);
       toast.error('Failed to load companies');
+      setCompanies([]); // Set empty array on error
     } finally {
       setLoading(false);
     }
@@ -281,7 +283,7 @@ export default function Companies() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {companies.map((company) => (
+              {Array.isArray(companies) && companies.map((company) => (
                 <TableRow key={company.id}>
                   <TableCell>
                     {company.logo ? (
