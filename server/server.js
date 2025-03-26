@@ -1777,7 +1777,16 @@ app.get('/api/dashboard/low-stock', authenticateToken, async (req, res) => {
 app.get('/api/companies', authenticateToken, async (req, res) => {
   try {
     const [companies] = await pool.query('SELECT * FROM companies ORDER BY created_at DESC');
-    res.json(companies);
+    
+    // Convert binary logo data to base64 for frontend display
+    const processedCompanies = companies.map(company => {
+      if (company.logo) {
+        company.logo = company.logo.toString('base64');
+      }
+      return company;
+    });
+    
+    res.json(processedCompanies);
   } catch (error) {
     console.error('Error fetching companies:', error);
     res.status(500).json({ error: 'Failed to fetch companies' });
