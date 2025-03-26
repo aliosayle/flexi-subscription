@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Users, Package, ShoppingCart, AlertTriangle, DollarSign } from 'lucide-react';
+import { Users, Package, ShoppingCart, AlertTriangle, DollarSign, Activity } from 'lucide-react';
 import api from '@/lib/axios';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -15,7 +15,7 @@ interface DashboardStats {
 }
 
 interface RecentActivity {
-  type: 'sale' | 'inventory';
+  type: 'sale' | 'inventory' | 'subscription';
   created_at: string;
   amount: number;
   payment_method?: string;
@@ -24,6 +24,8 @@ interface RecentActivity {
   transaction_type?: string;
   item_name?: string;
   quantity?: number;
+  id?: number;
+  description: string;
 }
 
 interface SalesByMonth {
@@ -168,39 +170,28 @@ export default function Dashboard() {
               <h2 className="text-lg font-semibold">Recent Activities</h2>
               <div className="space-y-4">
                 {recentActivities.map((activity) => (
-                  <div key={`${activity.type}-${activity.created_at}`} className="flex items-center justify-between p-4 bg-white rounded-lg shadow">
-                    <div className="flex items-center space-x-4">
-                      <div className={`p-2 rounded-full ${
-                        activity.type === 'sale' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'
-                      }`}>
+                  <div
+                    key={`${activity.type}-${activity.id || activity.created_at}`}
+                    className="flex items-center justify-between py-2"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
                         {activity.type === 'sale' ? (
-                          <ShoppingCart className="w-5 h-5" />
+                          <ShoppingCart className="h-4 w-4 text-primary" />
+                        ) : activity.type === 'subscription' ? (
+                          <Users className="h-4 w-4 text-primary" />
+                        ) : activity.type === 'inventory' ? (
+                          <Package className="h-4 w-4 text-primary" />
                         ) : (
-                          <Package className="w-5 h-5" />
+                          <Activity className="h-4 w-4 text-primary" />
                         )}
                       </div>
                       <div>
-                        <p className="font-medium">
-                          {activity.type === 'sale' ? (
-                            `Sale to ${activity.customer_name || 'Customer'}`
-                          ) : (
-                            `${activity.transaction_type === 'purchase' ? 'Purchase' : 'Sale'} of ${activity.item_name}`
-                          )}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {new Date(activity.created_at).toLocaleDateString()}
+                        <p className="text-sm font-medium">{activity.description}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(activity.created_at).toLocaleString()}
                         </p>
                       </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-medium">
-                        ${Number(activity.amount).toFixed(2)}
-                      </p>
-                      {activity.type === 'inventory' && (
-                        <p className="text-sm text-gray-500">
-                          {activity.quantity} units
-                        </p>
-                      )}
                     </div>
                   </div>
                 ))}

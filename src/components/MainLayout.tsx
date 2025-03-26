@@ -17,28 +17,26 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
   const { user, logout } = useAuth();
 
-  console.log('User:', user);
-  console.log('Permissions:', user?.permissions);
-  console.log('Role:', user?.role_name);
+  const isAdmin = user?.role_name === 'admin';
 
   const navigation = [
     {
       name: 'Dashboard',
       href: '/',
       icon: LayoutDashboard,
-      show: true
+      show: isAdmin
     },
     {
       name: 'Subscribers',
       href: '/subscribers',
       icon: Users,
-      show: true
+      show: isAdmin
     },
     {
       name: 'Inventory',
       href: '/inventory',
       icon: Package,
-      show: user?.permissions?.includes('manage_inventory')
+      show: isAdmin
     },
     {
       name: 'POS',
@@ -56,13 +54,13 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       name: 'Companies',
       href: '/companies',
       icon: Building2,
-      show: true
+      show: isAdmin
     },
     {
       name: 'Settings',
       href: '/settings',
       icon: Settings,
-      show: user?.role_name === 'admin'
+      show: isAdmin
     }
   ];
 
