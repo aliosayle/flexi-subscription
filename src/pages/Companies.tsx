@@ -62,13 +62,20 @@ export default function Companies() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate required fields
+    if (!formData.name.trim()) {
+      toast.error('Company name is required');
+      return;
+    }
+
     try {
       const formDataToSend = new FormData();
-      formDataToSend.append('name', formData.name);
-      formDataToSend.append('registration_number', formData.registration_number);
-      formDataToSend.append('vat_number', formData.vat_number);
-      formDataToSend.append('address', formData.address);
-      formDataToSend.append('id_nat', formData.id_nat);
+      formDataToSend.append('name', formData.name.trim());
+      formDataToSend.append('registration_number', formData.registration_number.trim());
+      formDataToSend.append('vat_number', formData.vat_number.trim());
+      formDataToSend.append('address', formData.address.trim());
+      formDataToSend.append('id_nat', formData.id_nat.trim());
       if (formData.logo) {
         formDataToSend.append('logo', formData.logo);
       }
@@ -88,21 +95,27 @@ export default function Companies() {
         });
         toast.success('Company created successfully');
       }
-      fetchCompanies();
+      
+      // Reset form and close dialog
+      resetForm();
       setIsDialogOpen(false);
-      setEditingCompany(null);
-      setFormData({
-        name: '',
-        registration_number: '',
-        vat_number: '',
-        address: '',
-        id_nat: '',
-        logo: null,
-      });
+      fetchCompanies();
     } catch (error) {
       console.error('Error saving company:', error);
       toast.error('Failed to save company');
     }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      registration_number: '',
+      vat_number: '',
+      address: '',
+      id_nat: '',
+      logo: null,
+    });
+    setEditingCompany(null);
   };
 
   const handleEdit = (company: Company) => {
@@ -116,6 +129,13 @@ export default function Companies() {
       logo: null,
     });
     setIsDialogOpen(true);
+  };
+
+  const handleDialogOpenChange = (open: boolean) => {
+    setIsDialogOpen(open);
+    if (!open) {
+      resetForm();
+    }
   };
 
   const handleDelete = async (id: number) => {
@@ -152,9 +172,9 @@ export default function Companies() {
           <h2 className="text-3xl font-bold tracking-tight">Companies</h2>
           <p className="text-muted-foreground">Manage your company information.</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
           <DialogTrigger asChild>
-            <Button>
+            <Button onClick={() => resetForm()}>
               <Plus className="mr-2 h-4 w-4" />
               Add Company
             </Button>
@@ -167,11 +187,12 @@ export default function Companies() {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="name">Name</Label>
+                    <Label htmlFor="name">Name *</Label>
                     <Input
                       id="name"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      required
                     />
                   </div>
                   <div className="space-y-2">
@@ -221,7 +242,7 @@ export default function Companies() {
                 </div>
               </div>
               <div className="flex justify-end space-x-2">
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                <Button type="button" variant="outline" onClick={() => handleDialogOpenChange(false)}>
                   Cancel
                 </Button>
                 <Button type="submit">
