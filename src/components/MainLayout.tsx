@@ -52,7 +52,7 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       name: 'Companies',
       href: '/companies',
       icon: Building2,
-      show: user?.permissions?.includes('manage_companies')
+      //show: user?.permissions?.includes('manage_companies')
     },
     {
       name: 'Settings',
