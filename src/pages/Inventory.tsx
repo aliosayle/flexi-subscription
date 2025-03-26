@@ -74,8 +74,6 @@ import {
   ResizableHandle
 } from '@/components/ui/resizable';
 import api from '@/lib/axios';
-import { useAuth } from '@/contexts/AuthContext';
-import { Navigate } from 'react-router-dom';
 
 // Type for transaction line items
 interface TransactionLineItem {
@@ -98,7 +96,6 @@ const INVENTORY_CATEGORIES = [
 ] as const;
 
 const Inventory = () => {
-  const { user } = useAuth();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [transactions, setTransactions] = useState<InventoryTransaction[]>([]);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
@@ -124,11 +121,6 @@ const Inventory = () => {
   // For pagination
   const pageSize = 10;
   const totalTransactions = transactions.length;
-
-  // Check if user has permission to manage inventory
-  if (!user?.permissions?.includes('manage_inventory')) {
-    return <Navigate to="/" replace />;
-  }
 
   // Fetch inventory items from API
   const fetchItems = async () => {

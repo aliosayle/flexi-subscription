@@ -491,22 +491,8 @@ app.delete('/api/packages/:id', async (req, res) => {
 //
 
 // Get all inventory items
-app.get('/api/inventory', authenticateToken, async (req, res) => {
+app.get('/api/inventory/items', async (req, res) => {
   try {
-    // Check if user has manage_inventory permission
-    const [permissions] = await pool.query(
-      `SELECT p.name 
-       FROM permissions p 
-       JOIN role_permissions rp ON p.id = rp.permission_id 
-       WHERE rp.role_id = ?`,
-      [req.user.role_id]
-    );
-
-    const hasPermission = permissions.some(p => p.name === 'manage_inventory');
-    if (!hasPermission) {
-      return res.status(403).json({ error: 'Access denied. Insufficient permissions.' });
-    }
-
     const [items] = await pool.execute(`
       SELECT * FROM inventory_items
       ORDER BY name ASC
@@ -571,22 +557,8 @@ app.get('/api/inventory/items/:id', async (req, res) => {
 });
 
 // Create inventory item
-app.post('/api/inventory', authenticateToken, async (req, res) => {
+app.post('/api/inventory/items', async (req, res) => {
   try {
-    // Check if user has manage_inventory permission
-    const [permissions] = await pool.query(
-      `SELECT p.name 
-       FROM permissions p 
-       JOIN role_permissions rp ON p.id = rp.permission_id 
-       WHERE rp.role_id = ?`,
-      [req.user.role_id]
-    );
-
-    const hasPermission = permissions.some(p => p.name === 'manage_inventory');
-    if (!hasPermission) {
-      return res.status(403).json({ error: 'Access denied. Insufficient permissions.' });
-    }
-
     const { name, description, sku, barcode, quantity, price, cost, category, imageSrc } = req.body;
     
     // Validate required fields
@@ -647,22 +619,8 @@ app.post('/api/inventory', authenticateToken, async (req, res) => {
 });
 
 // Update inventory item
-app.put('/api/inventory', authenticateToken, async (req, res) => {
+app.put('/api/inventory/items/:id', async (req, res) => {
   try {
-    // Check if user has manage_inventory permission
-    const [permissions] = await pool.query(
-      `SELECT p.name 
-       FROM permissions p 
-       JOIN role_permissions rp ON p.id = rp.permission_id 
-       WHERE rp.role_id = ?`,
-      [req.user.role_id]
-    );
-
-    const hasPermission = permissions.some(p => p.name === 'manage_inventory');
-    if (!hasPermission) {
-      return res.status(403).json({ error: 'Access denied. Insufficient permissions.' });
-    }
-
     const { id } = req.params;
     const { name, description, sku, barcode, price, cost, category, imageSrc } = req.body;
     
@@ -720,22 +678,8 @@ app.put('/api/inventory', authenticateToken, async (req, res) => {
 });
 
 // Delete inventory item
-app.delete('/api/inventory', authenticateToken, async (req, res) => {
+app.delete('/api/inventory/items/:id', async (req, res) => {
   try {
-    // Check if user has manage_inventory permission
-    const [permissions] = await pool.query(
-      `SELECT p.name 
-       FROM permissions p 
-       JOIN role_permissions rp ON p.id = rp.permission_id 
-       WHERE rp.role_id = ?`,
-      [req.user.role_id]
-    );
-
-    const hasPermission = permissions.some(p => p.name === 'manage_inventory');
-    if (!hasPermission) {
-      return res.status(403).json({ error: 'Access denied. Insufficient permissions.' });
-    }
-
     const { id } = req.params;
     
     // Check if item exists
