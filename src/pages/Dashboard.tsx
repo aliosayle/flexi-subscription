@@ -169,9 +169,9 @@ export default function Dashboard() {
             <div className="space-y-4">
               <h2 className="text-lg font-semibold">Recent Activities</h2>
               <div className="space-y-4">
-                {recentActivities.map((activity) => (
+                {recentActivities.map((activity, index) => (
                   <div
-                    key={`${activity.type}-${activity.id || activity.created_at}`}
+                    key={`activity-${activity.type}-${activity.id || activity.created_at}-${index}`}
                     className="flex items-center justify-between py-2"
                   >
                     <div className="flex items-center gap-3">
