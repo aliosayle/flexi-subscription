@@ -37,6 +37,7 @@ export default function Companies() {
     address: '',
     id_nat: '',
     logo: null as File | null,
+    logoPreview: null as string | null,
   });
 
   // Check if user is admin
@@ -98,6 +99,7 @@ export default function Companies() {
         address: '',
         id_nat: '',
         logo: null,
+        logoPreview: null,
       });
     } catch (error) {
       console.error('Error saving company:', error);
@@ -114,6 +116,7 @@ export default function Companies() {
       address: company.address,
       id_nat: company.id_nat,
       logo: null,
+      logoPreview: company.logo ? `${import.meta.env.VITE_API_URL}/uploads/${company.logo}` : null,
     });
     setIsDialogOpen(true);
   };
@@ -133,7 +136,12 @@ export default function Companies() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setFormData({ ...formData, logo: e.target.files[0] });
+      const file = e.target.files[0];
+      setFormData({ 
+        ...formData, 
+        logo: file,
+        logoPreview: URL.createObjectURL(file)
+      });
     }
   };
 
@@ -209,14 +217,31 @@ export default function Companies() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="logo">Logo</Label>
-                  <div className="flex items-center space-x-2">
-                    <Input
-                      id="logo"
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileChange}
-                    />
-                    <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                  <div className="flex items-center space-x-4">
+                    <div className="relative">
+                      <Input
+                        id="logo"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileChange}
+                        className="hidden"
+                      />
+                      <Label
+                        htmlFor="logo"
+                        className="cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2"
+                      >
+                        Choose File
+                      </Label>
+                    </div>
+                    {(formData.logoPreview || editingCompany?.logo) && (
+                      <div className="w-12 h-12 rounded-full overflow-hidden border border-border">
+                        <img
+                          src={formData.logoPreview || `${import.meta.env.VITE_API_URL}/uploads/${editingCompany?.logo}`}
+                          alt="Company logo preview"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -238,7 +263,7 @@ export default function Companies() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Logo</TableHead>
+                <TableHead className="w-[60px]">Logo</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Registration Number</TableHead>
                 <TableHead>VAT Number</TableHead>
@@ -251,17 +276,21 @@ export default function Companies() {
               {companies.map((company) => (
                 <TableRow key={company.id}>
                   <TableCell>
-                    {company.logo ? (
-                      <img 
-                        src={`${import.meta.env.VITE_API_URL}/uploads/${company.logo}`} 
-                        alt={`${company.name} logo`}
-                        className="w-8 h-8 object-contain"
-                      />
-                    ) : (
-                      <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
-                        <span className="text-gray-500 text-xs">{company.name.charAt(0)}</span>
-                      </div>
-                    )}
+                    <div className="w-10 h-10 rounded-full overflow-hidden border border-border">
+                      {company.logo ? (
+                        <img 
+                          src={`${import.meta.env.VITE_API_URL}/uploads/${company.logo}`} 
+                          alt={`${company.name} logo`}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-muted flex items-center justify-center">
+                          <span className="text-muted-foreground text-sm font-medium">
+                            {company.name.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>{company.name}</TableCell>
                   <TableCell>{company.registration_number}</TableCell>
