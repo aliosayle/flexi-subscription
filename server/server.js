@@ -13,7 +13,6 @@ const { body, validationResult } = require('express-validator');
 const app = express();
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
-const companiesRouter = require('./routes/companies');
 
 // Security middleware
 app.use(helmet()); // Adds various HTTP headers for security
@@ -1754,15 +1753,6 @@ app.get('/api/dashboard/low-stock', authenticateToken, async (req, res) => {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
-
-// Routes
-app.use('/api/auth', authRouter);
-app.use('/api/users', usersRouter);
-app.use('/api/subscribers', subscribersRouter);
-app.use('/api/inventory', inventoryRouter);
-app.use('/api/sales', salesRouter);
-app.use('/api/dashboard', dashboardRouter);
-app.use('/api/companies', companiesRouter);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
