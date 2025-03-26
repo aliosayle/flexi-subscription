@@ -34,7 +34,7 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       name: 'Inventory',
       href: '/inventory',
       icon: Package,
-      show: true
+      show: user?.permissions?.includes('manage_inventory')
     },
     {
       name: 'POS',
@@ -52,7 +52,7 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       name: 'Companies',
       href: '/companies',
       icon: Building2,
-      show: user?.role_name === 'admin'
+      show: user?.permissions?.includes('manage_companies')
     },
     {
       name: 'Settings',
