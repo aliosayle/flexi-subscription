@@ -21,6 +21,7 @@ interface Company {
   address: string;
   id_nat: string;
   logo?: string;
+  logo_type?: string;
   created_at: string;
   updated_at: string;
 }
@@ -37,7 +38,8 @@ export default function Companies() {
     vat_number: '',
     address: '',
     id_nat: '',
-    logo: null as File | null
+    logo: null as File | null,
+    logo_type: ''
   });
 
   // Check if user is admin
@@ -95,7 +97,8 @@ export default function Companies() {
         vat_number: '',
         address: '',
         id_nat: '',
-        logo: null
+        logo: null,
+        logo_type: ''
       });
       fetchCompanies();
     } catch (error) {
@@ -112,7 +115,8 @@ export default function Companies() {
       vat_number: company.vat_number,
       address: company.address,
       id_nat: company.id_nat,
-      logo: null
+      logo: null,
+      logo_type: company.logo_type || ''
     });
     setIsDialogOpen(true);
   };
@@ -132,8 +136,28 @@ export default function Companies() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setFormData({ ...formData, logo: e.target.files[0] });
+      const file = e.target.files[0];
+      // Validate file type
+      const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+      if (!validTypes.includes(file.type)) {
+        toast.error('Please upload a valid image file (JPEG, PNG, GIF, WEBP)');
+        return;
+      }
+      
+      setFormData({ 
+        ...formData, 
+        logo: file,
+        logo_type: file.type 
+      });
+      toast.success('Image selected successfully');
     }
+  };
+
+  // Helper function to get the image source with the correct content type
+  const getImageSrc = (logo?: string, logoType?: string) => {
+    if (!logo) return '';
+    const contentType = logoType || 'image/jpeg';
+    return `data:${contentType};base64,${logo}`;
   };
 
   if (loading) {
@@ -221,7 +245,7 @@ export default function Companies() {
                   {editingCompany?.logo && (
                     <Avatar className="h-12 w-12 border border-gray-200">
                       <AvatarImage 
-                        src={`data:image/jpeg;base64,${editingCompany.logo}`} 
+                        src={getImageSrc(editingCompany.logo, editingCompany.logo_type)} 
                         alt={editingCompany.name}
                       />
                       <AvatarFallback>{editingCompany.name.substring(0, 2).toUpperCase()}</AvatarFallback>
@@ -262,7 +286,10 @@ export default function Companies() {
                   <TableCell>
                     <Avatar className="h-10 w-10">
                       {company.logo ? (
-                        <AvatarImage src={`data:image/jpeg;base64,${company.logo}`} alt={company.name} />
+                        <AvatarImage 
+                          src={getImageSrc(company.logo, company.logo_type)} 
+                          alt={company.name}
+                        />
                       ) : null}
                       <AvatarFallback>{company.name.substring(0, 2).toUpperCase()}</AvatarFallback>
                     </Avatar>
