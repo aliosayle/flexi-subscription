@@ -9,6 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Plus, Pencil, Trash2, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/axios';
+import { useAuth } from '@/contexts/AuthContext';
+import { Navigate } from 'react-router-dom';
 
 interface Company {
   id: number;
@@ -23,6 +25,7 @@ interface Company {
 }
 
 export default function Companies() {
+  const { user } = useAuth();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -35,6 +38,11 @@ export default function Companies() {
     id_net: '',
     logo: null as File | null,
   });
+
+  // Check if user is admin
+  if (user?.role_name !== 'admin') {
+    return <Navigate to="/" replace />;
+  }
 
   const fetchCompanies = async () => {
     try {
