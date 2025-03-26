@@ -80,7 +80,18 @@ export default function Companies() {
         formDataToSend.append('logo', formData.logo);
       }
 
+      // Debug: Log form data
+      console.log('Form Data:', {
+        name: formData.name.trim(),
+        registration_number: formData.registration_number.trim(),
+        vat_number: formData.vat_number.trim(),
+        address: formData.address.trim(),
+        id_nat: formData.id_nat.trim(),
+        hasLogo: !!formData.logo
+      });
+
       if (editingCompany) {
+        console.log('Updating company:', editingCompany.id);
         await api.put(`/api/companies/${editingCompany.id}`, formDataToSend, {
           headers: {
             'Content-Type': 'multipart/form-data',
@@ -88,6 +99,7 @@ export default function Companies() {
         });
         toast.success('Company updated successfully');
       } else {
+        console.log('Creating new company');
         await api.post('/api/companies', formDataToSend, {
           headers: {
             'Content-Type': 'multipart/form-data',

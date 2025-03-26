@@ -1830,8 +1830,26 @@ app.get('/api/companies/:id/logo', authenticateToken, async (req, res) => {
 // Create company
 app.post('/api/companies', authenticateToken, async (req, res) => {
   try {
+    console.log('Received company creation request');
+    console.log('Request body:', req.body);
+    console.log('Request files:', req.files);
+
     const { name, registration_number, vat_number, address, id_nat } = req.body;
     const logo = req.files?.logo ? req.files.logo.data : null;
+
+    // Validate required fields
+    if (!name) {
+      return res.status(400).json({ error: 'Company name is required' });
+    }
+
+    console.log('Creating company with data:', {
+      name,
+      registration_number,
+      vat_number,
+      address,
+      id_nat,
+      hasLogo: !!logo
+    });
 
     const [result] = await pool.query(
       'INSERT INTO companies (name, registration_number, vat_number, address, id_nat, logo) VALUES (?, ?, ?, ?, ?, ?)',
@@ -1847,8 +1865,26 @@ app.post('/api/companies', authenticateToken, async (req, res) => {
 // Update company
 app.put('/api/companies/:id', authenticateToken, async (req, res) => {
   try {
+    console.log('Received company update request for ID:', req.params.id);
+    console.log('Request body:', req.body);
+    console.log('Request files:', req.files);
+
     const { name, registration_number, vat_number, address, id_nat } = req.body;
     const logo = req.files?.logo ? req.files.logo.data : null;
+
+    // Validate required fields
+    if (!name) {
+      return res.status(400).json({ error: 'Company name is required' });
+    }
+
+    console.log('Updating company with data:', {
+      name,
+      registration_number,
+      vat_number,
+      address,
+      id_nat,
+      hasLogo: !!logo
+    });
 
     if (logo) {
       await pool.query(
