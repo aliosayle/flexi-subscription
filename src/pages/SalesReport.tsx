@@ -79,8 +79,37 @@ export default function SalesReport() {
         api.get(`/api/sales/summary?startDate=${start}&endDate=${end}`)
       ]);
 
-      setSales(salesResponse.data);
-      setSummary(summaryResponse.data);
+      const salesData = salesResponse.data || [];
+      
+      // Transform and normalize summary data
+      let summaryData = summaryResponse.data || [];
+      if (Array.isArray(summaryData)) {
+        // Calculate aggregated summary from the array of data
+        const totalSales = summaryData.length;
+        const totalRevenue = summaryData.reduce((sum, item) => sum + parseFloat(item.total || 0), 0);
+        const totalItems = salesData.reduce((sum, sale) => {
+          return sum + (sale.items ? sale.items.reduce((itemSum, item) => itemSum + item.quantity, 0) : 0);
+        }, 0);
+        
+        // Aggregate payment methods
+        const paymentMethods = {};
+        summaryData.forEach(item => {
+          const method = item.payment_method || 'Unknown';
+          paymentMethods[method] = (paymentMethods[method] || 0) + parseFloat(item.total || 0);
+        });
+        
+        // Create a standardized summary object
+        summaryData = {
+          total_sales: totalSales,
+          total_revenue: totalRevenue,
+          average_sale: totalSales > 0 ? totalRevenue / totalSales : 0,
+          total_items_sold: totalItems,
+          payment_methods: paymentMethods
+        };
+      }
+
+      setSales(salesData);
+      setSummary(summaryData);
     } catch (error) {
       console.error('Error fetching sales:', error);
       toast.error('Failed to fetch sales data');
@@ -146,7 +175,7 @@ export default function SalesReport() {
   const paymentMethodData = summary?.payment_methods ? 
     Object.entries(summary.payment_methods).map(([method, amount]) => ({
       method,
-      amount
+      amount: typeof amount === 'number' ? amount : 0
     })) : [];
 
   return (
@@ -210,7 +239,7 @@ export default function SalesReport() {
               <CardTitle className="text-sm font-medium">Total Sales</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{summary.total_sales}</div>
+              <div className="text-2xl font-bold">{summary.total_sales || 0}</div>
             </CardContent>
           </Card>
           <Card>
@@ -218,7 +247,7 @@ export default function SalesReport() {
               <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">${summary.total_revenue.toFixed(2)}</div>
+              <div className="text-2xl font-bold">${(summary.total_revenue || 0).toFixed(2)}</div>
             </CardContent>
           </Card>
           <Card>
@@ -226,7 +255,7 @@ export default function SalesReport() {
               <CardTitle className="text-sm font-medium">Average Sale</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">${summary.average_sale.toFixed(2)}</div>
+              <div className="text-2xl font-bold">${(summary.average_sale || 0).toFixed(2)}</div>
             </CardContent>
           </Card>
           <Card>
@@ -234,7 +263,7 @@ export default function SalesReport() {
               <CardTitle className="text-sm font-medium">Items Sold</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{summary.total_items_sold}</div>
+              <div className="text-2xl font-bold">{summary.total_items_sold || 0}</div>
             </CardContent>
           </Card>
         </div>
@@ -305,7 +334,10 @@ export default function SalesReport() {
                     <TableCell>{format(new Date(sale.created_at), 'PPP')}</TableCell>
                     <TableCell>{sale.customer_name || 'Walk-in'}</TableCell>
                     <TableCell>
-                      {sale.items.map(item => `${item.name} (${item.quantity})`).join(', ')}
+                      {sale.items ? 
+                        sale.items.map(item => `${item.name} (${item.quantity})`).join(', ') : 
+                        'No items'
+                      }
                     </TableCell>
                     <TableCell className="text-right">${sale.subtotal.toFixed(2)}</TableCell>
                     <TableCell className="text-right">${sale.tax.toFixed(2)}</TableCell>
