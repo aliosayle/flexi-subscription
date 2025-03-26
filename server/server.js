@@ -1786,12 +1786,12 @@ app.get('/api/companies', authenticateToken, async (req, res) => {
 
 app.post('/api/companies', authenticateToken, upload.single('logo'), async (req, res) => {
   try {
-    const { name, registration_number, vat_number, address, id_net } = req.body;
+    const { name, registration_number, vat_number, address, id_nat } = req.body;
     const logo = req.file ? req.file.buffer : null;
 
     const [result] = await pool.query(
-      'INSERT INTO companies (name, registration_number, vat_number, address, id_net, logo) VALUES (?, ?, ?, ?, ?, ?)',
-      [name, registration_number, vat_number, address, id_net, logo]
+      'INSERT INTO companies (name, registration_number, vat_number, address, id_nat, logo) VALUES (?, ?, ?, ?, ?, ?)',
+      [name, registration_number, vat_number, address, id_nat, logo]
     );
 
     res.status(201).json({ id: result.insertId, message: 'Company created successfully' });
@@ -1804,11 +1804,11 @@ app.post('/api/companies', authenticateToken, upload.single('logo'), async (req,
 app.put('/api/companies/:id', authenticateToken, upload.single('logo'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, registration_number, vat_number, address, id_net } = req.body;
+    const { name, registration_number, vat_number, address, id_nat } = req.body;
     const logo = req.file ? req.file.buffer : null;
 
-    let query = 'UPDATE companies SET name = ?, registration_number = ?, vat_number = ?, address = ?, id_net = ?';
-    let params = [name, registration_number, vat_number, address, id_net];
+    let query = 'UPDATE companies SET name = ?, registration_number = ?, vat_number = ?, address = ?, id_nat = ?';
+    let params = [name, registration_number, vat_number, address, id_nat];
 
     if (logo) {
       query += ', logo = ?';

@@ -18,8 +18,8 @@ interface Company {
   registration_number: string;
   vat_number: string;
   address: string;
-  id_net: string;
-  logo: string | null;
+  id_nat: string;
+  logo?: string;
   created_at: string;
   updated_at: string;
 }
@@ -35,8 +35,8 @@ export default function Companies() {
     registration_number: '',
     vat_number: '',
     address: '',
-    id_net: '',
-    logo: null as File | null,
+    id_nat: '',
+    logo: null as File | null
   });
 
   // Check if user is admin
@@ -93,8 +93,8 @@ export default function Companies() {
         registration_number: '',
         vat_number: '',
         address: '',
-        id_net: '',
-        logo: null,
+        id_nat: '',
+        logo: null
       });
       fetchCompanies();
     } catch (error) {
@@ -104,14 +104,13 @@ export default function Companies() {
   };
 
   const handleEdit = (company: Company) => {
-    setEditingCompany(company);
     setFormData({
       name: company.name,
       registration_number: company.registration_number,
       vat_number: company.vat_number,
       address: company.address,
-      id_net: company.id_net,
-      logo: null,
+      id_nat: company.id_nat,
+      logo: null
     });
     setIsDialogOpen(true);
   };
@@ -199,12 +198,12 @@ export default function Companies() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="id_net">ID Net</Label>
+                <Label htmlFor="id_nat">ID Nat</Label>
                 <Input
-                  id="id_net"
-                  value={formData.id_net}
-                  onChange={(e) => setFormData({ ...formData, id_net: e.target.value })}
-                  required
+                  id="id_nat"
+                  value={formData.id_nat}
+                  onChange={(e) => setFormData({ ...formData, id_nat: e.target.value })}
+                  placeholder="Enter ID Nat"
                 />
               </div>
               <div className="space-y-2">
@@ -241,7 +240,7 @@ export default function Companies() {
                 <TableHead>Registration Number</TableHead>
                 <TableHead>VAT Number</TableHead>
                 <TableHead>Address</TableHead>
-                <TableHead>ID Net</TableHead>
+                <TableHead>ID Nat</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -252,7 +251,7 @@ export default function Companies() {
                   <TableCell>{company.registration_number}</TableCell>
                   <TableCell>{company.vat_number}</TableCell>
                   <TableCell>{company.address}</TableCell>
-                  <TableCell>{company.id_net}</TableCell>
+                  <TableCell>{company.id_nat}</TableCell>
                   <TableCell>
                     <div className="flex space-x-2">
                       <Button
