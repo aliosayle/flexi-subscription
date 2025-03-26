@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import api from '@/lib/axios';
 import { useAuth } from '@/contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 interface Company {
   id: number;
@@ -209,7 +210,7 @@ export default function Companies() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="logo">Company Logo</Label>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-4">
                   <Input
                     id="logo"
                     type="file"
@@ -217,6 +218,12 @@ export default function Companies() {
                     onChange={handleFileChange}
                   />
                   <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                  {editingCompany?.logo && (
+                    <Avatar className="h-12 w-12 border border-gray-200">
+                      <AvatarImage src={`data:image/jpeg;base64,${editingCompany.logo}`} alt={editingCompany.name} />
+                      <AvatarFallback>{editingCompany.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                  )}
                 </div>
               </div>
               <div className="flex justify-end space-x-2">
@@ -237,6 +244,7 @@ export default function Companies() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Logo</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Registration Number</TableHead>
                 <TableHead>VAT Number</TableHead>
@@ -248,6 +256,12 @@ export default function Companies() {
             <TableBody>
               {companies.map((company) => (
                 <TableRow key={company.id}>
+                  <TableCell>
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage src={company.logo ? `data:image/jpeg;base64,${company.logo}` : ''} alt={company.name} />
+                      <AvatarFallback>{company.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                  </TableCell>
                   <TableCell>{company.name}</TableCell>
                   <TableCell>{company.registration_number}</TableCell>
                   <TableCell>{company.vat_number}</TableCell>
