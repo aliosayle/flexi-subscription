@@ -79,23 +79,44 @@ export default function SalesReport() {
         api.get(`/api/sales/summary?startDate=${start}&endDate=${end}`)
       ]);
 
-      const salesData = salesResponse.data || [];
+      // Normalize the sales data to ensure numeric fields are numbers
+      const salesData = (salesResponse.data || []).map(sale => ({
+        ...sale,
+        subtotal: typeof sale.subtotal === 'number' ? sale.subtotal : parseFloat(sale.subtotal) || 0,
+        tax: typeof sale.tax === 'number' ? sale.tax : parseFloat(sale.tax) || 0, 
+        discount: typeof sale.discount === 'number' ? sale.discount : parseFloat(sale.discount) || 0,
+        total: typeof sale.total === 'number' ? sale.total : parseFloat(sale.total) || 0,
+        items: Array.isArray(sale.items) ? sale.items.map(item => ({
+          ...item,
+          quantity: typeof item.quantity === 'number' ? item.quantity : parseInt(item.quantity) || 0,
+          price: typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0,
+          total: typeof item.total === 'number' ? item.total : parseFloat(item.total) || 0
+        })) : []
+      }));
       
       // Transform and normalize summary data
       let summaryData = summaryResponse.data || [];
       if (Array.isArray(summaryData)) {
         // Calculate aggregated summary from the array of data
         const totalSales = summaryData.length;
-        const totalRevenue = summaryData.reduce((sum, item) => sum + parseFloat(item.total || 0), 0);
+        const totalRevenue = summaryData.reduce((sum, item) => {
+          const itemTotal = typeof item.total === 'number' ? item.total : parseFloat(item.total) || 0;
+          return sum + itemTotal;
+        }, 0);
+        
         const totalItems = salesData.reduce((sum, sale) => {
-          return sum + (sale.items ? sale.items.reduce((itemSum, item) => itemSum + item.quantity, 0) : 0);
+          return sum + (Array.isArray(sale.items) ? sale.items.reduce((itemSum, item) => {
+            const quantity = typeof item.quantity === 'number' ? item.quantity : parseInt(item.quantity) || 0;
+            return itemSum + quantity;
+          }, 0) : 0);
         }, 0);
         
         // Aggregate payment methods
         const paymentMethods = {};
         summaryData.forEach(item => {
           const method = item.payment_method || 'Unknown';
-          paymentMethods[method] = (paymentMethods[method] || 0) + parseFloat(item.total || 0);
+          const itemTotal = typeof item.total === 'number' ? item.total : parseFloat(item.total) || 0;
+          paymentMethods[method] = (paymentMethods[method] || 0) + itemTotal;
         });
         
         // Create a standardized summary object
@@ -123,50 +144,62 @@ export default function SalesReport() {
   }, [startDate, endDate]);
 
   const handleExport = () => {
-    // Create CSV content
-    const headers = ['Date', 'Customer', 'Items', 'Subtotal', 'Tax', 'Discount', 'Total', 'Payment Method'];
-    const rows = sales.map(sale => [
-      format(new Date(sale.created_at), 'yyyy-MM-dd'),
-      sale.customer_name || 'Walk-in',
-      sale.items.map(item => `${item.name} (${item.quantity})`).join(', '),
-      sale.subtotal,
-      sale.tax,
-      sale.discount,
-      sale.total,
-      sale.payment_method
-    ]);
+    try {
+      // Create CSV content
+      const headers = ['Date', 'Customer', 'Items', 'Subtotal', 'Tax', 'Discount', 'Total', 'Payment Method'];
+      const rows = sales.map(sale => [
+        format(new Date(sale.created_at || new Date()), 'yyyy-MM-dd'),
+        sale.customer_name || 'Walk-in',
+        Array.isArray(sale.items) 
+          ? sale.items.map(item => `${item.name || 'Unknown'} (${item.quantity || 0})`).join(', ')
+          : 'No items',
+        typeof sale.subtotal === 'number' ? sale.subtotal.toFixed(2) : '0.00',
+        typeof sale.tax === 'number' ? sale.tax.toFixed(2) : '0.00',
+        typeof sale.discount === 'number' ? sale.discount.toFixed(2) : '0.00',
+        typeof sale.total === 'number' ? sale.total.toFixed(2) : '0.00',
+        sale.payment_method || 'Unknown'
+      ]);
 
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
-    ].join('\n');
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.join(','))
+      ].join('\n');
 
-    // Create and download file
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `sales-report-${format(new Date(), 'yyyy-MM-dd')}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
+      // Create and download file
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sales-report-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      toast.error('Failed to export data');
+    }
   };
 
   // Prepare data for charts
   const dailySalesData = sales.reduce((acc: any[], sale) => {
-    const date = format(new Date(sale.created_at), 'yyyy-MM-dd');
-    const existing = acc.find(item => item.date === date);
-    
-    if (existing) {
-      existing.sales += 1;
-      existing.revenue += sale.total;
-    } else {
-      acc.push({
-        date,
-        sales: 1,
-        revenue: sale.total
-      });
+    try {
+      const date = format(new Date(sale.created_at || new Date()), 'yyyy-MM-dd');
+      const existing = acc.find(item => item.date === date);
+      const saleTotal = typeof sale.total === 'number' ? sale.total : parseFloat(sale.total) || 0;
+      
+      if (existing) {
+        existing.sales += 1;
+        existing.revenue += saleTotal;
+      } else {
+        acc.push({
+          date,
+          sales: 1,
+          revenue: saleTotal
+        });
+      }
+    } catch (error) {
+      console.error('Error processing sale for chart:', error);
     }
     
     return acc;
@@ -334,16 +367,16 @@ export default function SalesReport() {
                     <TableCell>{format(new Date(sale.created_at), 'PPP')}</TableCell>
                     <TableCell>{sale.customer_name || 'Walk-in'}</TableCell>
                     <TableCell>
-                      {sale.items ? 
-                        sale.items.map(item => `${item.name} (${item.quantity})`).join(', ') : 
+                      {Array.isArray(sale.items) ? 
+                        sale.items.map(item => `${item.name || 'Unknown'} (${item.quantity || 0})`).join(', ') : 
                         'No items'
                       }
                     </TableCell>
-                    <TableCell className="text-right">${sale.subtotal.toFixed(2)}</TableCell>
-                    <TableCell className="text-right">${sale.tax.toFixed(2)}</TableCell>
-                    <TableCell className="text-right">${sale.discount.toFixed(2)}</TableCell>
-                    <TableCell className="text-right">${sale.total.toFixed(2)}</TableCell>
-                    <TableCell>{sale.payment_method}</TableCell>
+                    <TableCell className="text-right">${typeof sale.subtotal === 'number' ? sale.subtotal.toFixed(2) : '0.00'}</TableCell>
+                    <TableCell className="text-right">${typeof sale.tax === 'number' ? sale.tax.toFixed(2) : '0.00'}</TableCell>
+                    <TableCell className="text-right">${typeof sale.discount === 'number' ? sale.discount.toFixed(2) : '0.00'}</TableCell>
+                    <TableCell className="text-right">${typeof sale.total === 'number' ? sale.total.toFixed(2) : '0.00'}</TableCell>
+                    <TableCell>{sale.payment_method || 'Unknown'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
