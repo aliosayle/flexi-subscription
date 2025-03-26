@@ -254,7 +254,7 @@ export default function Companies() {
                     {company.logo ? (
                       <div className="relative w-8 h-8">
                         <img 
-                          src={`${import.meta.env.VITE_API_URL}/uploads/${company.logo}`} 
+                          src={`${import.meta.env.VITE_API_URL}/api/companies/${company.id}/logo`} 
                           alt={`${company.name} logo`}
                           className="w-8 h-8 object-contain rounded-full"
                           onError={(e) => {

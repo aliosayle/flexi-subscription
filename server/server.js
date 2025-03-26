@@ -1791,7 +1791,11 @@ app.get('/api/dashboard/low-stock', authenticateToken, async (req, res) => {
 // Companies routes
 app.get('/api/companies', authenticateToken, async (req, res) => {
   try {
-    const [companies] = await pool.query('SELECT * FROM companies ORDER BY created_at DESC');
+    const [companies] = await pool.query(`
+      SELECT id, name, registration_number, vat_number, address, id_nat, logo, created_at, updated_at 
+      FROM companies 
+      ORDER BY name
+    `);
     res.json(companies);
   } catch (error) {
     console.error('Error fetching companies:', error);
@@ -1799,16 +1803,35 @@ app.get('/api/companies', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/companies', upload.single('logo'), async (req, res) => {
+// Get company logo
+app.get('/api/companies/:id/logo', authenticateToken, async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT logo FROM companies WHERE id = ?', [req.params.id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+    const company = rows[0];
+    if (!company.logo) {
+      return res.status(404).json({ error: 'No logo found' });
+    }
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.send(company.logo);
+  } catch (error) {
+    console.error('Error fetching company logo:', error);
+    res.status(500).json({ error: 'Failed to fetch company logo' });
+  }
+});
+
+// Create company
+app.post('/api/companies', authenticateToken, async (req, res) => {
   try {
     const { name, registration_number, vat_number, address, id_nat } = req.body;
-    const logo = req.file ? req.file.filename : null;
+    const logo = req.files?.logo ? req.files.logo.data : null;
 
     const [result] = await pool.query(
       'INSERT INTO companies (name, registration_number, vat_number, address, id_nat, logo) VALUES (?, ?, ?, ?, ?, ?)',
       [name, registration_number, vat_number, address, id_nat, logo]
     );
-
     res.status(201).json({ id: result.insertId, message: 'Company created successfully' });
   } catch (error) {
     console.error('Error creating company:', error);
@@ -1816,37 +1839,23 @@ app.post('/api/companies', upload.single('logo'), async (req, res) => {
   }
 });
 
-app.put('/api/companies/:id', upload.single('logo'), async (req, res) => {
+// Update company
+app.put('/api/companies/:id', authenticateToken, async (req, res) => {
   try {
-    const { id } = req.params;
     const { name, registration_number, vat_number, address, id_nat } = req.body;
-    const logo = req.file ? req.file.filename : null;
-
-    let query = 'UPDATE companies SET name = ?, registration_number = ?, vat_number = ?, address = ?, id_nat = ?';
-    let params = [name, registration_number, vat_number, address, id_nat];
+    const logo = req.files?.logo ? req.files.logo.data : null;
 
     if (logo) {
-      // Get the old logo filename
-      const [oldCompany] = await pool.query('SELECT logo FROM companies WHERE id = ?', [id]);
-      const oldLogo = oldCompany[0]?.logo;
-
-      // Delete old logo file if it exists
-      if (oldLogo) {
-        const oldLogoPath = path.join(uploadsDir, oldLogo);
-        if (fs.existsSync(oldLogoPath)) {
-          fs.unlinkSync(oldLogoPath);
-        }
-      }
-
-      query += ', logo = ?';
-      params.push(logo);
+      await pool.query(
+        'UPDATE companies SET name = ?, registration_number = ?, vat_number = ?, address = ?, id_nat = ?, logo = ? WHERE id = ?',
+        [name, registration_number, vat_number, address, id_nat, logo, req.params.id]
+      );
+    } else {
+      await pool.query(
+        'UPDATE companies SET name = ?, registration_number = ?, vat_number = ?, address = ?, id_nat = ? WHERE id = ?',
+        [name, registration_number, vat_number, address, id_nat, req.params.id]
+      );
     }
-
-    query += ' WHERE id = ?';
-    params.push(id);
-
-    await pool.query(query, params);
-
     res.json({ message: 'Company updated successfully' });
   } catch (error) {
     console.error('Error updating company:', error);
