@@ -265,6 +265,7 @@ export default function Companies() {
                             fallback.innerHTML = `<span class="text-gray-500 text-xs">${company.name.charAt(0)}</span>`;
                             target.parentNode?.appendChild(fallback);
                           }}
+                          crossOrigin="anonymous"
                         />
                       </div>
                     ) : (

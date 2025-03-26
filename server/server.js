@@ -1814,7 +1814,12 @@ app.get('/api/companies/:id/logo', authenticateToken, async (req, res) => {
     if (!company.logo) {
       return res.status(404).json({ error: 'No logo found' });
     }
+    
+    // Set appropriate headers for image display
     res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Cache-Control', 'public, max-age=31536000');
+    
+    // Send the BLOB data directly
     res.send(company.logo);
   } catch (error) {
     console.error('Error fetching company logo:', error);
