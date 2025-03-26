@@ -220,7 +220,10 @@ export default function Companies() {
                   <ImageIcon className="h-4 w-4 text-muted-foreground" />
                   {editingCompany?.logo && (
                     <Avatar className="h-12 w-12 border border-gray-200">
-                      <AvatarImage src={`data:image/jpeg;base64,${editingCompany.logo}`} alt={editingCompany.name} />
+                      <AvatarImage 
+                        src={`data:image/jpeg;base64,${editingCompany.logo}`} 
+                        alt={editingCompany.name}
+                      />
                       <AvatarFallback>{editingCompany.name.substring(0, 2).toUpperCase()}</AvatarFallback>
                     </Avatar>
                   )}
@@ -258,7 +261,9 @@ export default function Companies() {
                 <TableRow key={company.id}>
                   <TableCell>
                     <Avatar className="h-10 w-10">
-                      <AvatarImage src={company.logo ? `data:image/jpeg;base64,${company.logo}` : ''} alt={company.name} />
+                      {company.logo ? (
+                        <AvatarImage src={`data:image/jpeg;base64,${company.logo}`} alt={company.name} />
+                      ) : null}
                       <AvatarFallback>{company.name.substring(0, 2).toUpperCase()}</AvatarFallback>
                     </Avatar>
                   </TableCell>
