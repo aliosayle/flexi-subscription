@@ -990,6 +990,64 @@ app.get('/api/sales', async (req, res) => {
   }
 });
 
+// Get sales summary (for reporting)
+app.get('/api/sales/summary', async (req, res) => {
+  try {
+    const { period = 'daily', startDate, endDate } = req.query;
+    
+    let groupBy;
+    let dateFormat;
+    
+    // Define grouping based on period
+    switch (period) {
+      case 'daily':
+        groupBy = 'DATE(created_at)';
+        dateFormat = '%Y-%m-%d';
+        break;
+      case 'weekly':
+        groupBy = 'YEARWEEK(created_at)';
+        dateFormat = '%Y-%u';
+        break;
+      case 'monthly':
+        groupBy = 'MONTH(created_at), YEAR(created_at)';
+        dateFormat = '%Y-%m';
+        break;
+      default:
+        groupBy = 'DATE(created_at)';
+        dateFormat = '%Y-%m-%d';
+    }
+    
+    // Build query with optional date range
+    let query = `
+      SELECT 
+        DATE_FORMAT(created_at, '${dateFormat}') as period,
+        COUNT(*) as count,
+        SUM(subtotal) as subtotal,
+        SUM(tax) as tax,
+        SUM(total) as total,
+        SUM(CASE WHEN payment_method = 'cash' THEN total ELSE 0 END) as cash_total,
+        SUM(CASE WHEN payment_method = 'card' THEN total ELSE 0 END) as card_total
+      FROM sales
+    `;
+    
+    const queryParams = [];
+    
+    if (startDate && endDate) {
+      query += ` WHERE created_at BETWEEN ? AND ?`;
+      queryParams.push(startDate, endDate);
+    }
+    
+    query += ` GROUP BY ${groupBy} ORDER BY created_at ASC`;
+    
+    const [results] = await pool.execute(query, queryParams);
+    
+    res.json(results);
+  } catch (error) {
+    console.error('Error fetching sales summary:', error);
+    res.status(500).json({ error: 'Failed to fetch sales summary' });
+  }
+});
+
 // Get sales by date range
 app.get('/api/sales/by-date', async (req, res) => {
   try {
@@ -1016,6 +1074,11 @@ app.get('/api/sales/by-date', async (req, res) => {
 app.get('/api/sales/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // Check if it's a number to ensure we're not matching 'summary' or other routes
+    if (isNaN(parseInt(id))) {
+      return res.status(404).json({ error: 'Sale not found' });
+    }
     
     // Get sale details
     const [sales] = await pool.execute(`
@@ -1142,64 +1205,6 @@ app.post('/api/sales', async (req, res) => {
     res.status(500).json({ error: 'Failed to create sale: ' + error.message });
   } finally {
     connection2.end();
-  }
-});
-
-// Get sales summary (for reporting)
-app.get('/api/sales/summary', async (req, res) => {
-  try {
-    const { period = 'daily', startDate, endDate } = req.query;
-    
-    let groupBy;
-    let dateFormat;
-    
-    // Define grouping based on period
-    switch (period) {
-      case 'daily':
-        groupBy = 'DATE(created_at)';
-        dateFormat = '%Y-%m-%d';
-        break;
-      case 'weekly':
-        groupBy = 'YEARWEEK(created_at)';
-        dateFormat = '%Y-%u';
-        break;
-      case 'monthly':
-        groupBy = 'MONTH(created_at), YEAR(created_at)';
-        dateFormat = '%Y-%m';
-        break;
-      default:
-        groupBy = 'DATE(created_at)';
-        dateFormat = '%Y-%m-%d';
-    }
-    
-    // Build query with optional date range
-    let query = `
-      SELECT 
-        DATE_FORMAT(created_at, '${dateFormat}') as period,
-        COUNT(*) as count,
-        SUM(subtotal) as subtotal,
-        SUM(tax) as tax,
-        SUM(total) as total,
-        SUM(CASE WHEN payment_method = 'cash' THEN total ELSE 0 END) as cash_total,
-        SUM(CASE WHEN payment_method = 'card' THEN total ELSE 0 END) as card_total
-      FROM sales
-    `;
-    
-    const queryParams = [];
-    
-    if (startDate && endDate) {
-      query += ` WHERE created_at BETWEEN ? AND ?`;
-      queryParams.push(startDate, endDate);
-    }
-    
-    query += ` GROUP BY ${groupBy} ORDER BY created_at ASC`;
-    
-    const [results] = await pool.execute(query, queryParams);
-    
-    res.json(results);
-  } catch (error) {
-    console.error('Error fetching sales summary:', error);
-    res.status(500).json({ error: 'Failed to fetch sales summary' });
   }
 });
 

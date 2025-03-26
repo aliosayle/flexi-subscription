@@ -7,7 +7,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CalendarIcon, Download } from 'lucide-react';
 import { format } from 'date-fns';
-import { api } from '@/lib/api';
+import api from '@/lib/axios';
 import { toast } from 'sonner';
 import {
   Table,
