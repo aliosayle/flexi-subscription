@@ -17,6 +17,10 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
   const { user, logout } = useAuth();
 
+  console.log('User:', user);
+  console.log('Permissions:', user?.permissions);
+  console.log('Role:', user?.role_name);
+
   const navigation = [
     {
       name: 'Dashboard',
