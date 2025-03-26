@@ -1064,10 +1064,10 @@ app.post('/api/sales', async (req, res) => {
     const { 
       items, 
       subtotal, 
-      tax, 
+      tax = 0, 
       discount = 0, 
       total, 
-      paymentMethod,
+      paymentMethod = 'cash',
       customer_id = null,
       customer_name = null,
       customer_email = null,
@@ -1079,41 +1079,52 @@ app.post('/api/sales', async (req, res) => {
       return res.status(400).json({ error: 'Sale must have at least one item' });
     }
     
-    if (!subtotal || !tax || !total || !paymentMethod) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    if (subtotal === undefined || total === undefined) {
+      return res.status(400).json({ error: 'Missing required fields: subtotal and total are required' });
     }
+    
+    // Parse numeric values to ensure they're numbers
+    const parsedSubtotal = parseFloat(subtotal);
+    const parsedTax = parseFloat(tax);
+    const parsedDiscount = parseFloat(discount);
+    const parsedTotal = parseFloat(total);
     
     // Insert sale record
     const [saleResult] = await connection2.execute(`
       INSERT INTO sales 
       (subtotal, tax, discount, total, payment_method, customer_id, customer_name, customer_email, created_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [subtotal, tax, discount, total, paymentMethod, customer_id, customer_name, customer_email, created_by]);
+    `, [parsedSubtotal, parsedTax, parsedDiscount, parsedTotal, paymentMethod, customer_id, customer_name, customer_email, created_by]);
     
     const saleId = saleResult.insertId;
     
     // Insert each sale item and create inventory transactions
     for (const item of items) {
+      const itemId = parseInt(item.itemId, 10);
+      const quantity = parseInt(item.quantity, 10);
+      const price = parseFloat(item.price);
+      const totalPrice = parseFloat(item.totalPrice);
+      
       // Add sale item
       await connection2.execute(`
         INSERT INTO sale_items 
         (sale_id, item_id, quantity, price, total)
         VALUES (?, ?, ?, ?, ?)
-      `, [saleId, item.itemId, item.quantity, item.price, item.totalPrice]);
+      `, [saleId, itemId, quantity, price, totalPrice]);
       
       // Update inventory quantity
       await connection2.execute(`
         UPDATE inventory_items
         SET quantity = quantity - ?
         WHERE id = ?
-      `, [item.quantity, item.itemId]);
+      `, [quantity, itemId]);
       
       // Create inventory transaction for the sale
       await connection2.execute(`
         INSERT INTO inventory_transactions 
         (item_id, type, quantity, price, total_amount, notes, created_by)
         VALUES (?, 'sale', ?, ?, ?, ?, ?)
-      `, [item.itemId, item.quantity, item.price, item.totalPrice, `Sale ID: ${saleId}`, created_by]);
+      `, [itemId, quantity, price, totalPrice, `Sale ID: ${saleId}`, created_by]);
     }
     
     // Commit the transaction
@@ -1128,7 +1139,7 @@ app.post('/api/sales', async (req, res) => {
     // Rollback if there's an error
     await connection2.rollback();
     console.error('Error creating sale:', error);
-    res.status(500).json({ error: 'Failed to create sale' });
+    res.status(500).json({ error: 'Failed to create sale: ' + error.message });
   } finally {
     connection2.end();
   }

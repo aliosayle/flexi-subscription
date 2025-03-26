@@ -194,6 +194,9 @@ const POS = () => {
     }
     
     try {
+      const subtotalValue = calculateSubtotal();
+      const totalValue = calculateTotal();
+      
       await api.post('/api/sales', {
         items: cartItems.map(item => ({
           itemId: item.itemId,
@@ -201,14 +204,14 @@ const POS = () => {
           price: item.price,
           totalPrice: item.totalPrice
         })),
-        subtotal: calculateSubtotal(),
+        subtotal: subtotalValue,
         tax: 0, // No tax, price is all-inclusive
         discount: 0,
-        total: calculateTotal(),
-        paymentMethod: paymentMethod,
-        customer_id: selectedCustomer?.id,
-        customer_name: selectedCustomer?.name,
-        customer_email: selectedCustomer?.email
+        total: totalValue,
+        paymentMethod: 'cash',
+        customer_id: selectedCustomer?.id || null,
+        customer_name: selectedCustomer?.name || null,
+        customer_email: selectedCustomer?.email || null
       });
       toast.success('Sale completed successfully');
       setCartItems([]);
@@ -279,7 +282,7 @@ const POS = () => {
                   </span>
                 </div>
               </CardHeader>
-              <CardContent className="max-h-[400px] overflow-y-auto">
+              <CardContent className="h-[300px] overflow-y-auto">
                 {cartItems.length === 0 ? (
                   <div className="text-center py-4 text-muted-foreground">
                     <Package className="mx-auto h-8 w-8 mb-2 opacity-50" />
