@@ -18,8 +18,8 @@ interface Company {
   registration_number: string;
   vat_number: string;
   address: string;
-  id_net: string;
-  logo: string | null;
+  id_nat: string;
+  logo?: string;
   created_at: string;
   updated_at: string;
 }
@@ -35,7 +35,7 @@ export default function Companies() {
     registration_number: '',
     vat_number: '',
     address: '',
-    id_net: '',
+    id_nat: '',
     logo: null as File | null,
   });
 
@@ -64,11 +64,14 @@ export default function Companies() {
     e.preventDefault();
     try {
       const formDataToSend = new FormData();
-      Object.entries(formData).forEach(([key, value]) => {
-        if (value !== null) {
-          formDataToSend.append(key, value);
-        }
-      });
+      formDataToSend.append('name', formData.name);
+      formDataToSend.append('registration_number', formData.registration_number);
+      formDataToSend.append('vat_number', formData.vat_number);
+      formDataToSend.append('address', formData.address);
+      formDataToSend.append('id_nat', formData.id_nat);
+      if (formData.logo) {
+        formDataToSend.append('logo', formData.logo);
+      }
 
       if (editingCompany) {
         await api.put(`/api/companies/${editingCompany.id}`, formDataToSend, {
@@ -85,7 +88,7 @@ export default function Companies() {
         });
         toast.success('Company created successfully');
       }
-
+      fetchCompanies();
       setIsDialogOpen(false);
       setEditingCompany(null);
       setFormData({
@@ -93,10 +96,9 @@ export default function Companies() {
         registration_number: '',
         vat_number: '',
         address: '',
-        id_net: '',
+        id_nat: '',
         logo: null,
       });
-      fetchCompanies();
     } catch (error) {
       console.error('Error saving company:', error);
       toast.error('Failed to save company');
@@ -110,7 +112,7 @@ export default function Companies() {
       registration_number: company.registration_number,
       vat_number: company.vat_number,
       address: company.address,
-      id_net: company.id_net,
+      id_nat: company.id_nat,
       logo: null,
     });
     setIsDialogOpen(true);
@@ -162,61 +164,60 @@ export default function Companies() {
               <DialogTitle>{editingCompany ? 'Edit Company' : 'Add Company'}</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Company Name</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="registration_number">Registration Number</Label>
-                <Input
-                  id="registration_number"
-                  value={formData.registration_number}
-                  onChange={(e) => setFormData({ ...formData, registration_number: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="vat_number">VAT Number</Label>
-                <Input
-                  id="vat_number"
-                  value={formData.vat_number}
-                  onChange={(e) => setFormData({ ...formData, vat_number: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="address">Address</Label>
-                <Textarea
-                  id="address"
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="id_net">ID Net</Label>
-                <Input
-                  id="id_net"
-                  value={formData.id_net}
-                  onChange={(e) => setFormData({ ...formData, id_net: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="logo">Company Logo</Label>
-                <div className="flex items-center space-x-2">
-                  <Input
-                    id="logo"
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileChange}
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Name</Label>
+                    <Input
+                      id="name"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="registration_number">Registration Number</Label>
+                    <Input
+                      id="registration_number"
+                      value={formData.registration_number}
+                      onChange={(e) => setFormData({ ...formData, registration_number: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="vat_number">VAT Number</Label>
+                    <Input
+                      id="vat_number"
+                      value={formData.vat_number}
+                      onChange={(e) => setFormData({ ...formData, vat_number: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="id_nat">ID Nat</Label>
+                    <Input
+                      id="id_nat"
+                      value={formData.id_nat}
+                      onChange={(e) => setFormData({ ...formData, id_nat: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="address">Address</Label>
+                  <Textarea
+                    id="address"
+                    value={formData.address}
+                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                   />
-                  <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="logo">Logo</Label>
+                  <div className="flex items-center space-x-2">
+                    <Input
+                      id="logo"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileChange}
+                    />
+                    <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                  </div>
                 </div>
               </div>
               <div className="flex justify-end space-x-2">
@@ -237,22 +238,36 @@ export default function Companies() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Logo</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Registration Number</TableHead>
                 <TableHead>VAT Number</TableHead>
+                <TableHead>ID Nat</TableHead>
                 <TableHead>Address</TableHead>
-                <TableHead>ID Net</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {companies.map((company) => (
                 <TableRow key={company.id}>
+                  <TableCell>
+                    {company.logo ? (
+                      <img 
+                        src={`${import.meta.env.VITE_API_URL}/uploads/${company.logo}`} 
+                        alt={`${company.name} logo`}
+                        className="w-8 h-8 object-contain"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+                        <span className="text-gray-500 text-xs">{company.name.charAt(0)}</span>
+                      </div>
+                    )}
+                  </TableCell>
                   <TableCell>{company.name}</TableCell>
                   <TableCell>{company.registration_number}</TableCell>
                   <TableCell>{company.vat_number}</TableCell>
+                  <TableCell>{company.id_nat}</TableCell>
                   <TableCell>{company.address}</TableCell>
-                  <TableCell>{company.id_net}</TableCell>
                   <TableCell>
                     <div className="flex space-x-2">
                       <Button

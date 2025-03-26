@@ -12,23 +12,38 @@ const morgan = require('morgan');
 const { body, validationResult } = require('express-validator');
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
 
-// Multer configuration for file uploads
-const storage = multer.memoryStorage();
-const upload = multer({
+// Create uploads directory if it doesn't exist
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir);
+}
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadsDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ 
   storage: storage,
   limits: {
     fileSize: 5 * 1024 * 1024 // 5MB limit
   },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
-    if (allowedTypes.includes(file.mimetype)) {
+    if (file.mimetype.startsWith('image/')) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only JPEG, PNG and GIF are allowed.'));
+      cb(new Error('Only image files are allowed!'));
     }
   }
 });
@@ -1784,14 +1799,14 @@ app.get('/api/companies', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/companies', authenticateToken, upload.single('logo'), async (req, res) => {
+app.post('/api/companies', upload.single('logo'), async (req, res) => {
   try {
-    const { name, registration_number, vat_number, address, id_net } = req.body;
-    const logo = req.file ? req.file.buffer : null;
+    const { name, registration_number, vat_number, address, id_nat } = req.body;
+    const logo = req.file ? req.file.filename : null;
 
     const [result] = await pool.query(
-      'INSERT INTO companies (name, registration_number, vat_number, address, id_net, logo) VALUES (?, ?, ?, ?, ?, ?)',
-      [name, registration_number, vat_number, address, id_net, logo]
+      'INSERT INTO companies (name, registration_number, vat_number, address, id_nat, logo) VALUES (?, ?, ?, ?, ?, ?)',
+      [name, registration_number, vat_number, address, id_nat, logo]
     );
 
     res.status(201).json({ id: result.insertId, message: 'Company created successfully' });
@@ -1801,16 +1816,28 @@ app.post('/api/companies', authenticateToken, upload.single('logo'), async (req,
   }
 });
 
-app.put('/api/companies/:id', authenticateToken, upload.single('logo'), async (req, res) => {
+app.put('/api/companies/:id', upload.single('logo'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, registration_number, vat_number, address, id_net } = req.body;
-    const logo = req.file ? req.file.buffer : null;
+    const { name, registration_number, vat_number, address, id_nat } = req.body;
+    const logo = req.file ? req.file.filename : null;
 
-    let query = 'UPDATE companies SET name = ?, registration_number = ?, vat_number = ?, address = ?, id_net = ?';
-    let params = [name, registration_number, vat_number, address, id_net];
+    let query = 'UPDATE companies SET name = ?, registration_number = ?, vat_number = ?, address = ?, id_nat = ?';
+    let params = [name, registration_number, vat_number, address, id_nat];
 
     if (logo) {
+      // Get the old logo filename
+      const [oldCompany] = await pool.query('SELECT logo FROM companies WHERE id = ?', [id]);
+      const oldLogo = oldCompany[0]?.logo;
+
+      // Delete old logo file if it exists
+      if (oldLogo) {
+        const oldLogoPath = path.join(uploadsDir, oldLogo);
+        if (fs.existsSync(oldLogoPath)) {
+          fs.unlinkSync(oldLogoPath);
+        }
+      }
+
       query += ', logo = ?';
       params.push(logo);
     }
@@ -1827,16 +1854,34 @@ app.put('/api/companies/:id', authenticateToken, upload.single('logo'), async (r
   }
 });
 
-app.delete('/api/companies/:id', authenticateToken, async (req, res) => {
+app.delete('/api/companies/:id', async (req, res) => {
   try {
     const { id } = req.params;
+
+    // Get the logo filename before deleting the company
+    const [company] = await pool.query('SELECT logo FROM companies WHERE id = ?', [id]);
+    const logo = company[0]?.logo;
+
+    // Delete the company
     await pool.query('DELETE FROM companies WHERE id = ?', [id]);
+
+    // Delete the logo file if it exists
+    if (logo) {
+      const logoPath = path.join(uploadsDir, logo);
+      if (fs.existsSync(logoPath)) {
+        fs.unlinkSync(logoPath);
+      }
+    }
+
     res.json({ message: 'Company deleted successfully' });
   } catch (error) {
     console.error('Error deleting company:', error);
     res.status(500).json({ error: 'Failed to delete company' });
   }
 });
+
+// Serve uploaded files
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Error handling middleware
 app.use((err, req, res, next) => {
