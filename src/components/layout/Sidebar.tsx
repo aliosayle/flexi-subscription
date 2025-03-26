@@ -10,7 +10,8 @@ import {
   ChevronRight, 
   BarChart,
   UserPlus,
-  Building2
+  Building2,
+  GitBranch
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -31,6 +32,7 @@ const navItems: NavItem[] = [
   { name: 'Inventory', path: '/inventory', icon: Boxes, role: 'admin' },
   { name: 'Users', path: '/users', icon: Users, role: 'admin' },
   { name: 'Companies', path: '/companies', icon: Building2, role: 'admin' },
+  { name: 'Branches', path: '/branches', icon: GitBranch, role: 'admin' },
 ];
 
 export function Sidebar() {

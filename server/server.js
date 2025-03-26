@@ -1896,6 +1896,135 @@ app.delete('/api/companies/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// ======================= BRANCH ROUTES =======================
+
+// Get all branches with company names
+app.get('/api/branches', authenticateToken, async (req, res) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT b.*, c.name as company_name
+      FROM branches b
+      JOIN companies c ON b.company_id = c.id
+      ORDER BY b.created_at DESC
+    `);
+    res.json(rows);
+  } catch (error) {
+    console.error('Error fetching branches:', error);
+    res.status(500).json({ error: 'Failed to fetch branches' });
+  }
+});
+
+// Get a single branch by ID
+app.get('/api/branches/:id', authenticateToken, async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM branches WHERE id = ?', [req.params.id]);
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Branch not found' });
+    }
+    
+    res.json(rows[0]);
+  } catch (error) {
+    console.error('Error fetching branch:', error);
+    res.status(500).json({ error: 'Failed to fetch branch' });
+  }
+});
+
+// Create a new branch
+app.post('/api/branches', authenticateToken, async (req, res) => {
+  try {
+    const { name, company_id, address, phone, email, manager_name, is_main } = req.body;
+    
+    // Validate required fields
+    if (!name || !company_id) {
+      return res.status(400).json({ error: 'Name and company ID are required' });
+    }
+    
+    // Check if company exists
+    const [companyRows] = await pool.query('SELECT id FROM companies WHERE id = ?', [company_id]);
+    if (companyRows.length === 0) {
+      return res.status(400).json({ error: 'Company does not exist' });
+    }
+    
+    // If this is set as main branch, update all other branches of this company to not be main
+    if (is_main) {
+      await pool.query('UPDATE branches SET is_main = 0 WHERE company_id = ?', [company_id]);
+    }
+    
+    // Insert new branch
+    const [result] = await pool.query(
+      'INSERT INTO branches (name, company_id, address, phone, email, manager_name, is_main) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [name, company_id, address, phone, email, manager_name, is_main ? 1 : 0]
+    );
+    
+    res.status(201).json({ id: result.insertId, message: 'Branch created successfully' });
+  } catch (error) {
+    console.error('Error creating branch:', error);
+    res.status(500).json({ error: 'Failed to create branch' });
+  }
+});
+
+// Update a branch
+app.put('/api/branches/:id', authenticateToken, async (req, res) => {
+  try {
+    const { name, company_id, address, phone, email, manager_name, is_main } = req.body;
+    const branchId = req.params.id;
+    
+    // Validate required fields
+    if (!name || !company_id) {
+      return res.status(400).json({ error: 'Name and company ID are required' });
+    }
+    
+    // Check if company exists
+    const [companyRows] = await pool.query('SELECT id FROM companies WHERE id = ?', [company_id]);
+    if (companyRows.length === 0) {
+      return res.status(400).json({ error: 'Company does not exist' });
+    }
+    
+    // Check if branch exists
+    const [branchRows] = await pool.query('SELECT id FROM branches WHERE id = ?', [branchId]);
+    if (branchRows.length === 0) {
+      return res.status(404).json({ error: 'Branch not found' });
+    }
+    
+    // If this is set as main branch, update all other branches of this company to not be main
+    if (is_main) {
+      await pool.query('UPDATE branches SET is_main = 0 WHERE company_id = ? AND id != ?', [company_id, branchId]);
+    }
+    
+    // Update branch
+    await pool.query(
+      'UPDATE branches SET name = ?, company_id = ?, address = ?, phone = ?, email = ?, manager_name = ?, is_main = ? WHERE id = ?',
+      [name, company_id, address, phone, email, manager_name, is_main ? 1 : 0, branchId]
+    );
+    
+    res.json({ message: 'Branch updated successfully' });
+  } catch (error) {
+    console.error('Error updating branch:', error);
+    res.status(500).json({ error: 'Failed to update branch' });
+  }
+});
+
+// Delete a branch
+app.delete('/api/branches/:id', authenticateToken, async (req, res) => {
+  try {
+    const branchId = req.params.id;
+    
+    // Check if branch exists
+    const [rows] = await pool.query('SELECT * FROM branches WHERE id = ?', [branchId]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Branch not found' });
+    }
+    
+    await pool.query('DELETE FROM branches WHERE id = ?', [branchId]);
+    
+    res.json({ message: 'Branch deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting branch:', error);
+    res.status(500).json({ error: 'Failed to delete branch' });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);

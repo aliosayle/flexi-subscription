@@ -26,6 +26,8 @@ async function setupDatabase() {
     await connection.query('DROP TABLE IF EXISTS inventory_transactions');
     await connection.query('DROP TABLE IF EXISTS inventory_items');
     await connection.query('DROP TABLE IF EXISTS role_permissions');
+    await connection.query('DROP TABLE IF EXISTS branches');
+    await connection.query('DROP TABLE IF EXISTS companies');
     await connection.query('DROP TABLE IF EXISTS users');
     await connection.query('DROP TABLE IF EXISTS permissions');
     await connection.query('DROP TABLE IF EXISTS roles');
@@ -154,6 +156,40 @@ async function setupDatabase() {
       )
     `);
     console.log('Sale items table created');
+
+    // Create companies table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS companies (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        name VARCHAR(100) NOT NULL,
+        registration_number VARCHAR(50),
+        vat_number VARCHAR(50),
+        address TEXT,
+        id_nat VARCHAR(50),
+        logo TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('Companies table created');
+
+    // Create branches table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS branches (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        name VARCHAR(100) NOT NULL,
+        company_id INT NOT NULL,
+        address TEXT,
+        phone VARCHAR(50),
+        email VARCHAR(100),
+        manager_name VARCHAR(100),
+        is_main BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+      )
+    `);
+    console.log('Branches table created');
 
     // Insert default roles
     await connection.query(`

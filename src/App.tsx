@@ -19,6 +19,7 @@ import Register from "@/pages/Register";
 import Subscribers from "@/pages/Subscribers";
 import SalesReport from "@/pages/SalesReport";
 import Companies from './pages/Companies';
+import Branches from './pages/Branches';
 
 const queryClient = new QueryClient();
 
@@ -125,6 +126,13 @@ const AppWithProviders = () => (
           <ProtectedRoute>
             <MainLayout>
               <Companies />
+            </MainLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/branches" element={
+          <ProtectedRoute>
+            <MainLayout>
+              <Branches />
             </MainLayout>
           </ProtectedRoute>
         } />
