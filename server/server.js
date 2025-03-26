@@ -1735,6 +1735,7 @@ app.get('/api/dashboard/recent-activities', authenticateToken, async (req, res) 
 // Get sales by month
 app.get('/api/dashboard/sales-by-month', authenticateToken, async (req, res) => {
   try {
+    // Force MySQL to use the date value correctly
     const [sales] = await pool.execute(`
       SELECT 
         DATE_FORMAT(created_at, '%Y-%m') as month,
@@ -1742,14 +1743,46 @@ app.get('/api/dashboard/sales-by-month', authenticateToken, async (req, res) => 
         COALESCE(SUM(total), 0) as total_sales
       FROM sales
       WHERE created_at >= DATE_SUB(CURRENT_DATE, INTERVAL 6 MONTH)
-      GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+      GROUP BY month
       ORDER BY month ASC
     `);
 
-    res.json(sales.map(sale => ({
-      ...sale,
-      total_sales: parseFloat(sale.total_sales)
-    })));
+    // If there's only one data point, add more data points for the graph
+    if (sales.length <= 1) {
+      // Get current date and calculate the past 6 months
+      const today = new Date();
+      const monthsData = [];
+      
+      for (let i = 5; i >= 0; i--) {
+        const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+        const monthStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        
+        // Check if we have data for this month
+        const existingData = sales.find(sale => sale.month === monthStr);
+        
+        if (existingData) {
+          monthsData.push({
+            ...existingData,
+            total_sales: parseFloat(existingData.total_sales)
+          });
+        } else {
+          // Add empty data for this month
+          monthsData.push({
+            month: monthStr,
+            count: 0,
+            total_sales: 0
+          });
+        }
+      }
+      
+      res.json(monthsData);
+    } else {
+      // Return the existing data with proper type conversion
+      res.json(sales.map(sale => ({
+        ...sale,
+        total_sales: parseFloat(sale.total_sales)
+      })));
+    }
   } catch (error) {
     console.error('Error fetching sales by month:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
