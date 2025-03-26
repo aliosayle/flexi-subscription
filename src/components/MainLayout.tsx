@@ -17,8 +17,6 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
   const { user, logout } = useAuth();
 
-  const isAdmin = user?.role_name === 'admin';
-
   const navigation = [
     {
       name: 'Dashboard',
@@ -54,13 +52,13 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       name: 'Companies',
       href: '/companies',
       icon: Building2,
-      show: isAdmin
+      show: user?.permissions?.includes('manage_companies')
     },
     {
       name: 'Settings',
       href: '/settings',
       icon: Settings,
-      show: isAdmin
+      show: user?.permissions?.includes('manage_settings')
     }
   ];
 

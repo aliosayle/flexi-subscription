@@ -39,8 +39,8 @@ export default function Companies() {
     logo: null as File | null,
   });
 
-  // Check if user is admin
-  if (user?.role_name !== 'admin') {
+  // Check if user has permission to manage companies
+  if (!user?.permissions?.includes('manage_companies')) {
     return <Navigate to="/" replace />;
   }
 
