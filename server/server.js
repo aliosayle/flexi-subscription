@@ -58,7 +58,7 @@ const authLimiter = rateLimit({
 
 // CORS configuration
 app.use(cors({
-  origin: ['http://localhost:8080', 'http://192.168.10.70:8080'],
+  origin: ['http://localhost:8080', 'http://192.168.10.70:8080', 'http://161.97.177.233:8080', 'http://172.18.0.1:8080'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
