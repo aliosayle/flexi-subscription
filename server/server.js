@@ -16,6 +16,22 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
 
+// CORS configuration - MUST be before other middleware
+app.use(cors({
+  origin: true, // Allow any origin in development
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  credentials: true,
+  preflightContinue: false,
+  optionsSuccessStatus: 204
+}));
+
+// Handle OPTIONS preflight requests explicitly
+app.options('*', cors());
+
+// Parse JSON bodies with size limit
+app.use(express.json({ limit: '10kb' }));
+
 // Multer configuration for file uploads
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -55,22 +71,6 @@ const authLimiter = rateLimit({
   max: 5, // Limit each IP to 5 login attempts per hour
   message: 'Too many login attempts, please try again later.'
 });
-
-// CORS configuration
-app.use(cors({
-  origin: '*', // Allow all origins in development
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
-  preflightContinue: false,
-  optionsSuccessStatus: 204
-}));
-
-// Handle preflight requests
-app.options('*', cors());
-
-// Parse JSON bodies with size limit
-app.use(express.json({ limit: '10kb' }));
 
 // Database connection with environment variables
 const pool = mysql.createPool({
