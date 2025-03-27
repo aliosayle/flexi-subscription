@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Users, Package, ShoppingCart, AlertTriangle, DollarSign, Activity } from 'lucide-react';
+import { Users, Package, ShoppingCart, AlertTriangle, DollarSign, Activity, Building2 } from 'lucide-react';
 import api from '@/lib/axios';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
+import { Badge } from '@/components/ui/badge';
 
 interface DashboardStats {
   totalSubscribers: number;
@@ -44,7 +45,7 @@ interface LowStockItem {
 }
 
 export default function Dashboard() {
-  const { token } = useAuth();
+  const { token, selectedBranch } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
   const [salesByMonth, setSalesByMonth] = useState<SalesByMonth[]>([]);
@@ -53,6 +54,7 @@ export default function Dashboard() {
 
   const fetchDashboardData = async () => {
     try {
+      setLoading(true);
       const [statsRes, activitiesRes, salesRes, lowStockRes] = await Promise.all([
         api.get('/api/dashboard/stats'),
         api.get('/api/dashboard/recent-activities'),
@@ -74,7 +76,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchDashboardData();
-  }, []);
+  }, [selectedBranch]);
 
   if (loading) {
     return (
@@ -88,7 +90,13 @@ export default function Dashboard() {
     <div className="space-y-6 animate-fade-in">
       <div>
         <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-        <p className="text-muted-foreground">Overview of your business performance.</p>
+        {selectedBranch && (
+          <div className="flex items-center gap-2 text-muted-foreground mt-1">
+            <Building2 className="h-4 w-4" />
+            <p>Branch: <span className="font-medium">{selectedBranch.name}</span></p>
+            <Badge variant="outline" className="ml-2">{selectedBranch.company_name}</Badge>
+          </div>
+        )}
       </div>
 
       {/* Stats Cards */}

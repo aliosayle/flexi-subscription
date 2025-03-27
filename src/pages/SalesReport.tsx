@@ -5,10 +5,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, Download } from 'lucide-react';
+import { CalendarIcon, Download, Building2 } from 'lucide-react';
 import { format } from 'date-fns';
 import api from '@/lib/axios';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
+import { Badge } from '@/components/ui/badge';
 import {
   Table,
   TableBody,
@@ -62,6 +64,7 @@ interface SalesSummary {
 }
 
 export default function SalesReport() {
+  const { selectedBranch } = useAuth();
   const [startDate, setStartDate] = useState<Date | undefined>(new Date());
   const [endDate, setEndDate] = useState<Date | undefined>(new Date());
   const [sales, setSales] = useState<Sale[]>([]);
@@ -141,7 +144,7 @@ export default function SalesReport() {
 
   useEffect(() => {
     fetchSales();
-  }, [startDate, endDate]);
+  }, [startDate, endDate, selectedBranch]);
 
   const handleExport = () => {
     try {
@@ -213,9 +216,19 @@ export default function SalesReport() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      <div className="flex flex-col gap-2">
+        <h2 className="text-3xl font-bold tracking-tight">Sales Report</h2>
+        {selectedBranch && (
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Building2 className="h-4 w-4" />
+            <p>Branch: <span className="font-medium">{selectedBranch.name}</span></p>
+            <Badge variant="outline" className="ml-2">{selectedBranch.company_name}</Badge>
+          </div>
+        )}
+      </div>
+
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Sales Report</h2>
           <p className="text-muted-foreground">View and analyze your sales data.</p>
         </div>
         <Button onClick={handleExport}>

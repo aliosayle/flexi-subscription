@@ -1088,7 +1088,7 @@ app.get('/api/sales', authenticateToken, branchFilter, async (req, res) => {
 });
 
 // Get sales summary (for reporting)
-app.get('/api/sales/summary', async (req, res) => {
+app.get('/api/sales/summary', authenticateToken, branchFilter, async (req, res) => {
   try {
     const { period = 'daily', startDate, endDate } = req.query;
     
@@ -1125,12 +1125,13 @@ app.get('/api/sales/summary', async (req, res) => {
         SUM(CASE WHEN payment_method = 'cash' THEN total ELSE 0 END) as cash_total,
         SUM(CASE WHEN payment_method = 'card' THEN total ELSE 0 END) as card_total
       FROM sales
+      WHERE (branch_id = ? OR branch_id IS NULL)
     `;
     
-    const queryParams = [];
+    const queryParams = [req.branch_id];
     
     if (startDate && endDate) {
-      query += ` WHERE created_at BETWEEN ? AND ?`;
+      query += ` AND created_at BETWEEN ? AND ?`;
       queryParams.push(startDate, endDate);
     }
     
@@ -1146,7 +1147,7 @@ app.get('/api/sales/summary', async (req, res) => {
 });
 
 // Get sales by date range
-app.get('/api/sales/by-date', async (req, res) => {
+app.get('/api/sales/by-date', authenticateToken, branchFilter, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     
@@ -1157,8 +1158,9 @@ app.get('/api/sales/by-date', async (req, res) => {
     const [sales] = await pool.execute(`
       SELECT * FROM sales
       WHERE created_at BETWEEN ? AND ?
+      AND (branch_id = ? OR branch_id IS NULL)
       ORDER BY created_at DESC
-    `, [startDate, endDate]);
+    `, [startDate, endDate, req.branch_id]);
     
     res.json(sales);
   } catch (error) {
@@ -1763,28 +1765,39 @@ app.post('/api/subscriptions', authenticateToken, async (req, res) => {
 
 // Dashboard routes
 // Get dashboard statistics
-app.get('/api/dashboard/stats', authenticateToken, async (req, res) => {
+app.get('/api/dashboard/stats', authenticateToken, branchFilter, async (req, res) => {
   try {
-    // Get total users
-    const [usersResult] = await pool.execute('SELECT COUNT(*) as total FROM users');
-    const totalUsers = usersResult[0].total;
+    // Get total subscribers for this branch
+    const [subscribersResult] = await pool.execute(
+      'SELECT COUNT(*) as total FROM subscribers WHERE branch_id = ? OR branch_id IS NULL',
+      [req.branch_id]
+    );
+    const totalSubscribers = subscribersResult[0].total;
 
-    // Get total sales and revenue
+    // Get total sales and revenue for this branch
     const [salesResult] = await pool.execute(`
       SELECT 
         COUNT(*) as total_sales,
         COALESCE(SUM(total), 0) as total_revenue
       FROM sales
-      WHERE created_at >= DATE_SUB(CURRENT_DATE, INTERVAL 30 DAY)
-    `);
+      WHERE (branch_id = ? OR branch_id IS NULL)
+      AND created_at >= DATE_SUB(CURRENT_DATE, INTERVAL 30 DAY)
+    `, [req.branch_id]);
     const { total_sales, total_revenue } = salesResult[0];
 
-    // Get total inventory items
-    const [inventoryResult] = await pool.execute('SELECT COUNT(*) as total FROM inventory_items');
-    const totalInventory = inventoryResult[0].total;
+    // Get total inventory items for this branch
+    const [inventoryResult] = await pool.execute(`
+      SELECT COUNT(*) as total 
+      FROM inventory_items i
+      LEFT JOIN inventory_transactions t ON i.id = t.item_id
+      WHERE t.branch_id = ? OR t.branch_id IS NULL
+      GROUP BY i.id
+    `, [req.branch_id]);
+    
+    const totalInventory = inventoryResult.length;
 
     res.json({
-      totalUsers,
+      totalSubscribers,
       totalSales: total_sales,
       totalInventory,
       totalRevenue: parseFloat(total_revenue)
@@ -1796,9 +1809,9 @@ app.get('/api/dashboard/stats', authenticateToken, async (req, res) => {
 });
 
 // Get recent activities
-app.get('/api/dashboard/recent-activities', authenticateToken, async (req, res) => {
+app.get('/api/dashboard/recent-activities', authenticateToken, branchFilter, async (req, res) => {
   try {
-    // Get recent sales
+    // Get recent sales for this branch
     const [sales] = await pool.execute(`
       SELECT 
         'sale' as type,
@@ -1808,11 +1821,12 @@ app.get('/api/dashboard/recent-activities', authenticateToken, async (req, res) 
         customer_name,
         customer_email
       FROM sales
+      WHERE branch_id = ? OR branch_id IS NULL
       ORDER BY created_at DESC
       LIMIT 5
-    `);
+    `, [req.branch_id]);
 
-    // Get recent inventory transactions
+    // Get recent inventory transactions for this branch
     const [inventoryTransactions] = await pool.execute(`
       SELECT 
         'inventory' as type,
@@ -1823,9 +1837,10 @@ app.get('/api/dashboard/recent-activities', authenticateToken, async (req, res) 
         t.quantity
       FROM inventory_transactions t
       JOIN inventory_items i ON t.item_id = i.id
+      WHERE t.branch_id = ? OR t.branch_id IS NULL
       ORDER BY t.created_at DESC
       LIMIT 5
-    `);
+    `, [req.branch_id]);
 
     // Combine and sort by date
     const activities = [...sales, ...inventoryTransactions]
@@ -1840,7 +1855,7 @@ app.get('/api/dashboard/recent-activities', authenticateToken, async (req, res) 
 });
 
 // Get sales by month
-app.get('/api/dashboard/sales-by-month', authenticateToken, async (req, res) => {
+app.get('/api/dashboard/sales-by-month', authenticateToken, branchFilter, async (req, res) => {
   try {
     // Force MySQL to use the date value correctly
     const [sales] = await pool.execute(`
@@ -1850,9 +1865,10 @@ app.get('/api/dashboard/sales-by-month', authenticateToken, async (req, res) => 
         COALESCE(SUM(total), 0) as total_sales
       FROM sales
       WHERE created_at >= DATE_SUB(CURRENT_DATE, INTERVAL 6 MONTH)
+      AND (branch_id = ? OR branch_id IS NULL)
       GROUP BY month
       ORDER BY month ASC
-    `);
+    `, [req.branch_id]);
 
     // If there's only one data point, add more data points for the graph
     if (sales.length <= 1) {
@@ -1897,21 +1913,24 @@ app.get('/api/dashboard/sales-by-month', authenticateToken, async (req, res) => 
 });
 
 // Get low stock items
-app.get('/api/dashboard/low-stock', authenticateToken, async (req, res) => {
+app.get('/api/dashboard/low-stock', authenticateToken, branchFilter, async (req, res) => {
   try {
     const [items] = await pool.execute(`
       SELECT 
-        id,
-        name,
-        sku,
-        quantity,
-        price,
-        cost
-      FROM inventory_items
-      WHERE quantity <= 10
-      ORDER BY quantity ASC
+        i.id,
+        i.name,
+        i.sku,
+        i.quantity,
+        i.price,
+        i.cost
+      FROM inventory_items i
+      LEFT JOIN inventory_transactions t ON i.id = t.item_id
+      WHERE i.quantity <= 10
+      AND (t.branch_id = ? OR t.branch_id IS NULL)
+      GROUP BY i.id
+      ORDER BY i.quantity ASC
       LIMIT 5
-    `);
+    `, [req.branch_id]);
 
     res.json(items.map(item => ({
       ...item,
