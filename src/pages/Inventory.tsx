@@ -142,7 +142,7 @@ const Inventory = () => {
   // Fetch transactions from API
   const fetchTransactions = async () => {
     try {
-      const response = await api.get('/api/inventory/transactions');
+      const response = await api.get('/api/transactions-direct');
       // Ensure numeric values are numbers
       const formattedTransactions = response.data.map(transaction => ({
         ...transaction,
