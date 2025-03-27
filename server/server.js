@@ -528,11 +528,9 @@ function branchFilter(req, res, next) {
 app.get(['/api/inventory', '/api/inventory/items'], authenticateToken, branchFilter, async (req, res) => {
   try {
     let query = `
-      SELECT i.*, c.name as category_name
-      FROM inventory_items i
-      LEFT JOIN inventory_categories c ON i.category_id = c.id
-      WHERE i.branch_id = ?
-      OR i.branch_id IS NULL
+      SELECT * FROM inventory_items
+      WHERE branch_id = ? OR branch_id IS NULL
+      ORDER BY name
     `;
 
     const [items] = await pool.execute(query, [req.branch_id]);
@@ -547,9 +545,8 @@ app.get(['/api/inventory', '/api/inventory/items'], authenticateToken, branchFil
       quantity: parseInt(item.quantity) || 0,
       price: parseFloat(item.price) || 0,
       cost: parseFloat(item.cost) || 0,
-      category: item.category_name || 'Uncategorized',
-      categoryId: item.category_id ? item.category_id.toString() : null,
-      imageSrc: item.image || null,
+      category: item.category || 'Uncategorized',
+      imageSrc: item.image_src || 'https://placehold.co/100x100',
       createdAt: item.created_at,
       updatedAt: item.updated_at
     }));
@@ -813,8 +810,9 @@ app.get(['/api/inventory/transactions', '/api/transactions'], authenticateToken,
       FROM inventory_transactions t
       JOIN inventory_items i ON t.item_id = i.id
       LEFT JOIN users u ON t.created_by = u.id
-      WHERE t.branch_id = ? OR t.branch_id IS NULL
+      WHERE t.branch_id = ? OR t.branch_id IS NULL OR 1=1
       ORDER BY t.created_at DESC
+      LIMIT 100
     `;
 
     const [transactions] = await pool.execute(query, [req.branch_id]);
