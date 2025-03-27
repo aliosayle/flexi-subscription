@@ -212,16 +212,16 @@ const POS = () => {
       
       await api.post('/api/sales', {
         items: cartItems.map(item => ({
-          itemId: item.itemId,
+          id: item.itemId,
           quantity: item.quantity,
           price: item.price,
-          totalPrice: item.totalPrice
+          total: item.totalPrice
         })),
         subtotal: subtotalValue,
         tax: 0, // No tax, price is all-inclusive
         discount: 0,
         total: totalValue,
-        paymentMethod: 'cash',
+        payment_method: 'cash',
         customer_id: selectedCustomer?.id || null,
         customer_name: selectedCustomer?.name || null,
         customer_email: selectedCustomer?.email || null

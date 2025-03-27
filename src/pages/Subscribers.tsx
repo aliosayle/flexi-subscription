@@ -40,7 +40,7 @@ import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Edit, Trash2, CreditCard, Calendar, Search, X } from 'lucide-react';
+import { Plus, Edit, Trash2, CreditCard, Calendar, Search, X, Building2 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -116,7 +116,7 @@ const Subscribers = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
-  const { token } = useAuth();
+  const { token, selectedBranch } = useAuth();
 
   const form = useForm<z.infer<typeof subscriberSchema>>({
     resolver: zodResolver(subscriberSchema),
@@ -144,7 +144,7 @@ const Subscribers = () => {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [selectedBranch]);
 
   useEffect(() => {
     applyFilters();
@@ -287,8 +287,17 @@ const Subscribers = () => {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Subscribers</h1>
+      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center mb-4">
+        <div>
+          <h1 className="text-2xl font-bold">Subscribers</h1>
+          {selectedBranch && (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Building2 className="h-4 w-4" />
+              <p>Branch: <span className="font-medium">{selectedBranch.name}</span></p>
+              <Badge variant="outline" className="ml-2">{selectedBranch.company_name}</Badge>
+            </div>
+          )}
+        </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
             <Button>

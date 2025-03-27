@@ -1504,7 +1504,7 @@ app.post('/api/users', authenticateToken, async (req, res) => {
 
 // Subscriber routes
 // Get all subscribers
-app.get('/api/subscribers', authenticateToken, async (req, res) => {
+app.get('/api/subscribers', authenticateToken, branchFilter, async (req, res) => {
   try {
     const [subscribers] = await pool.execute(`
       SELECT 
@@ -1518,9 +1518,10 @@ app.get('/api/subscribers', authenticateToken, async (req, res) => {
         END as current_status
       FROM subscribers s
       LEFT JOIN subscriptions sub ON s.id = sub.subscriber_id
+      WHERE s.branch_id = ? OR s.branch_id IS NULL
       GROUP BY s.id
       ORDER BY s.created_at DESC
-    `);
+    `, [req.branch_id]);
     
     res.json(subscribers);
   } catch (error) {
@@ -1530,7 +1531,7 @@ app.get('/api/subscribers', authenticateToken, async (req, res) => {
 });
 
 // Create subscriber
-app.post('/api/subscribers', authenticateToken, async (req, res) => {
+app.post('/api/subscribers', authenticateToken, branchFilter, async (req, res) => {
   try {
     const { name, email, phone, address, date_of_birth, gender, emergency_contact, emergency_phone } = req.body;
     
@@ -1551,10 +1552,10 @@ app.post('/api/subscribers', authenticateToken, async (req, res) => {
       }
     }
     
-    // Insert new subscriber
+    // Insert new subscriber with branch_id
     const [result] = await pool.execute(
-      'INSERT INTO subscribers (name, email, phone, address, date_of_birth, gender, emergency_contact, emergency_phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [name, email || null, phone || null, address || null, date_of_birth || null, gender || null, emergency_contact || null, emergency_phone || null]
+      'INSERT INTO subscribers (name, email, phone, address, date_of_birth, gender, emergency_contact, emergency_phone, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [name, email || null, phone || null, address || null, date_of_birth || null, gender || null, emergency_contact || null, emergency_phone || null, req.branch_id]
     );
     
     // Get the newly created subscriber
