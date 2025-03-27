@@ -16,6 +16,7 @@ const { pool, testConnection } = require('./config/db');
 // Import route modules
 const authRoutes = require('./routes/auth');
 const inventoryRoutes = require('./routes/inventory');
+const salesRoutes = require('./routes/sales');
 // ... Additional route imports will go here
 
 const app = express();
@@ -70,7 +71,11 @@ testConnection();
 // Set up routes
 app.use('/api/auth', authRoutes);
 app.use('/api/inventory', inventoryRoutes);
+app.use('/api/sales', salesRoutes);
 // ... Additional routes will be used here
+
+// For backward compatibility with dual URL patterns
+app.use('/api/transactions', inventoryRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
