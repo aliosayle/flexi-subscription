@@ -1,18 +1,7 @@
 import axios from 'axios';
 
-// Use relative URLs in development to leverage Vite's proxy
-// In production, use the full URL with hostname
-const getBaseUrl = () => {
-  if (import.meta.env.DEV) {
-    // When in development, use relative URLs which will be proxied by the Vite dev server
-    return '';  // Remove /api to prevent duplication
-  } else {
-    // When in production, use the same hostname as the client but port 5000
-    return `http://${window.location.hostname}:5000`;  // Remove /api to prevent duplication
-  }
-};
-
-const API_BASE_URL = getBaseUrl();
+// Use the server IP directly for production deployment
+const API_BASE_URL = 'http://161.97.177.233:5000';
 
 const api = axios.create({
   baseURL: API_BASE_URL,

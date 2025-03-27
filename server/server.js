@@ -16,33 +16,6 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
 
-// COMPLETELY DISABLE CORS - set before any other middleware
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    return res.status(204).end();
-  }
-  next();
-});
-
-// CORS middleware (as backup to the raw header setting above)
-app.use(cors({
-  origin: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  credentials: true,
-  preflightContinue: false,
-  optionsSuccessStatus: 204
-}));
-
-// Parse JSON bodies with size limit
-app.use(express.json({ limit: '10kb' }));
-
 // Multer configuration for file uploads
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -60,13 +33,8 @@ const upload = multer({
   }
 });
 
-// Security middleware - DISABLED for CORS issues
-// app.use(helmet({
-//   contentSecurityPolicy: false,
-//   crossOriginEmbedderPolicy: false,
-//   crossOriginOpenerPolicy: false,
-//   crossOriginResourcePolicy: false,
-// }));
+// Security middleware
+app.use(helmet()); // Adds various HTTP headers for security
 app.use(xss()); // Prevent XSS attacks
 app.use(hpp()); // Prevent HTTP Parameter Pollution
 app.use(morgan('combined')); // Logging
@@ -88,20 +56,38 @@ const authLimiter = rateLimit({
   message: 'Too many login attempts, please try again later.'
 });
 
-// Completely handle OPTIONS preflight for all routes
-app.options('*', (req, res) => {
+// COMPLETELY DISABLE CORS - set before any other middleware
+app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   res.header('Access-Control-Allow-Credentials', 'true');
-  res.status(204).end();
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+  next();
 });
+
+// CORS middleware (as backup to the raw header setting above)
+app.use(cors({
+  origin: '*',  // Allow all origins
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  credentials: true,
+  preflightContinue: false,
+  optionsSuccessStatus: 204
+}));
+
+// Parse JSON bodies with size limit
+app.use(express.json({ limit: '10kb' }));
 
 // Database connection with environment variables
 const pool = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
+  host: process.env.DB_HOST || '127.0.0.1',
   user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
+  password: process.env.DB_PASSWORD || 'goldfish',
   database: process.env.DB_NAME || 'flexigym',
   waitForConnections: true,
   connectionLimit: 10,
