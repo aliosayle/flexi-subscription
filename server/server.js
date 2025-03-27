@@ -543,7 +543,24 @@ app.get('/api/inventory', authenticateToken, branchFilter, async (req, res) => {
     query += ` ORDER BY name`;
     
     const [items] = await pool.query(query, params);
-    res.json(items);
+    
+    // Format response to ensure numeric values are numbers
+    const formattedItems = items.map(item => ({
+      id: item.id.toString(),
+      name: item.name,
+      description: item.description || '',
+      sku: item.sku,
+      barcode: item.barcode || '',
+      quantity: parseInt(item.quantity, 10),
+      price: parseFloat(item.price),
+      cost: parseFloat(item.cost),
+      category: item.category || '',
+      imageSrc: item.image_src || 'https://placehold.co/100x100',
+      createdAt: item.created_at,
+      updatedAt: item.updated_at
+    }));
+    
+    res.json(formattedItems);
   } catch (error) {
     console.error('Error fetching inventory items:', error);
     res.status(500).json({ message: 'Server error' });
@@ -791,17 +808,28 @@ app.get('/api/inventory/items/:id/transactions', async (req, res) => {
 });
 
 // Get all inventory transactions
-app.get('/api/inventory/transactions', async (req, res) => {
+app.get('/api/inventory/transactions', authenticateToken, branchFilter, async (req, res) => {
   try {
     // Get transactions with item and user info
-    const [transactions] = await pool.execute(`
+    let query = `
       SELECT t.*, i.name as item_name, i.sku as item_sku, u.name as created_by_name
       FROM inventory_transactions t
       JOIN inventory_items i ON t.item_id = i.id
       LEFT JOIN users u ON t.created_by = u.id
-      ORDER BY t.created_at DESC
-      LIMIT 100
-    `);
+      WHERE 1=1
+    `;
+    
+    const params = [];
+    
+    // If branch_id is set, filter by it
+    if (req.branch_id) {
+      query += ` AND (t.branch_id = ? OR t.branch_id IS NULL)`;
+      params.push(req.branch_id);
+    }
+    
+    query += ` ORDER BY t.created_at DESC LIMIT 100`;
+    
+    const [transactions] = await pool.query(query, params);
     
     // Format response
     const formattedTransactions = transactions.map(transaction => ({
@@ -810,7 +838,7 @@ app.get('/api/inventory/transactions', async (req, res) => {
       itemName: transaction.item_name,
       itemSku: transaction.item_sku,
       type: transaction.type,
-      quantity: transaction.quantity,
+      quantity: parseInt(transaction.quantity, 10),
       price: transaction.price ? parseFloat(transaction.price) : null,
       totalAmount: parseFloat(transaction.total_amount),
       notes: transaction.notes || '',

@@ -71,7 +71,13 @@ const POS = () => {
     try {
       setLoading(true);
       const response = await api.get('/api/inventory');
-      setItems(response.data);
+      // Ensure prices are numbers
+      const formattedItems = response.data.map(item => ({
+        ...item,
+        price: parseFloat(item.price),
+        cost: parseFloat(item.cost)
+      }));
+      setItems(formattedItems);
     } catch (error) {
       console.error('Error fetching items:', error);
       toast.error('Failed to fetch items');
