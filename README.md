@@ -38,7 +38,7 @@ This project is built with:
 
 ```sh
 # Clone the repository
-git clone https://github.com/yourusername/flexi-subscription.git
+git clone https://github.com/aliosayle/flexi-subscription.git
 
 # Navigate to the project directory
 cd flexi-subscription
