@@ -16,18 +16,29 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
 
-// CORS configuration - MUST be before other middleware
+// COMPLETELY DISABLE CORS - set before any other middleware
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+  next();
+});
+
+// CORS middleware (as backup to the raw header setting above)
 app.use(cors({
-  origin: true, // Allow any origin in development
+  origin: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   credentials: true,
   preflightContinue: false,
   optionsSuccessStatus: 204
 }));
-
-// Handle OPTIONS preflight requests explicitly
-app.options('*', cors());
 
 // Parse JSON bodies with size limit
 app.use(express.json({ limit: '10kb' }));
@@ -49,13 +60,13 @@ const upload = multer({
   }
 });
 
-// Security middleware
-app.use(helmet({
-  contentSecurityPolicy: false, // Disable CSP to prevent CORS issues
-  crossOriginEmbedderPolicy: false, // Disable COEP to prevent CORS issues
-  crossOriginOpenerPolicy: false, // Disable COOP to prevent CORS issues
-  crossOriginResourcePolicy: false, // Disable CORP to prevent CORS issues
-})); // Adds various HTTP headers for security
+// Security middleware - DISABLED for CORS issues
+// app.use(helmet({
+//   contentSecurityPolicy: false,
+//   crossOriginEmbedderPolicy: false,
+//   crossOriginOpenerPolicy: false,
+//   crossOriginResourcePolicy: false,
+// }));
 app.use(xss()); // Prevent XSS attacks
 app.use(hpp()); // Prevent HTTP Parameter Pollution
 app.use(morgan('combined')); // Logging
@@ -77,6 +88,15 @@ const authLimiter = rateLimit({
   message: 'Too many login attempts, please try again later.'
 });
 
+// Completely handle OPTIONS preflight for all routes
+app.options('*', (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.status(204).end();
+});
+
 // Database connection with environment variables
 const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
@@ -87,7 +107,8 @@ const pool = mysql.createPool({
   connectionLimit: 10,
   queueLimit: 0,
   enableKeepAlive: true,
-  ipv6: false // Disable IPv6 to prevent connecting to ::1 instead of 127.0.0.1
+  // MySQL2 sometimes has issues with IPv6, force IPv4
+  ipv6: false
 });
 
 // Test database connection
