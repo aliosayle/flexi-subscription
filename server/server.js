@@ -151,6 +151,16 @@ app.post('/api/auth/login', authLimiter, validateLogin, async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
     
+    // Get user's branches
+    const [userBranches] = await pool.execute(
+      `SELECT ub.branch_id, b.name, b.company_id, c.name as company_name 
+       FROM user_branches ub 
+       JOIN branches b ON ub.branch_id = b.id 
+       JOIN companies c ON b.company_id = c.id 
+       WHERE ub.user_id = ?`,
+      [user.id]
+    );
+    
     // Create token with shorter expiration
     const token = jwt.sign(
       { 
@@ -159,7 +169,8 @@ app.post('/api/auth/login', authLimiter, validateLogin, async (req, res) => {
         role_id: user.role_id,
         role_name: user.role_name,
         role_description: user.role_description,
-        permissions: user.permissions
+        permissions: user.permissions,
+        selected_branch_id: user.selected_branch_id
       },
       JWT_SECRET,
       { 
@@ -181,6 +192,7 @@ app.post('/api/auth/login', authLimiter, validateLogin, async (req, res) => {
     
     res.json({
       ...userWithoutPassword,
+      branches: userBranches,
       token
     });
   } catch (error) {
@@ -490,34 +502,51 @@ app.delete('/api/packages/:id', async (req, res) => {
 // INVENTORY ROUTES
 //
 
-// Get all inventory items
-app.get('/api/inventory/items', async (req, res) => {
+// Get user information from token
+function getUserFromToken(req) {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return null;
+  
   try {
-    const [items] = await pool.execute(`
+    return jwt.verify(token, JWT_SECRET);
+  } catch (error) {
+    return null;
+  }
+}
+
+// Branch filter middleware
+function branchFilter(req, res, next) {
+  const user = getUserFromToken(req);
+  if (!user) return next();
+  
+  // Set branch_id for filtering
+  req.branch_id = user.selected_branch_id;
+  next();
+}
+
+// Get all inventory items
+app.get('/api/inventory', authenticateToken, branchFilter, async (req, res) => {
+  try {
+    let query = `
       SELECT * FROM inventory_items
-      ORDER BY name ASC
-    `);
+      WHERE 1=1
+    `;
     
-    // Format response
-    const formattedItems = items.map(item => ({
-      id: item.id.toString(),
-      name: item.name,
-      description: item.description || '',
-      sku: item.sku,
-      barcode: item.barcode || '',
-      quantity: item.quantity,
-      price: parseFloat(item.price),
-      cost: parseFloat(item.cost),
-      category: item.category || '',
-      imageSrc: item.image_src || 'https://placehold.co/100x100',
-      createdAt: item.created_at,
-      updatedAt: item.updated_at
-    }));
+    const params = [];
     
-    res.json(formattedItems);
+    // If branch_id is set, filter by it
+    if (req.branch_id) {
+      query += ` AND (branch_id = ? OR branch_id IS NULL)`;
+      params.push(req.branch_id);
+    }
+    
+    query += ` ORDER BY name`;
+    
+    const [items] = await pool.query(query, params);
+    res.json(items);
   } catch (error) {
     console.error('Error fetching inventory items:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
@@ -976,17 +1005,30 @@ app.post('/api/inventory/bulk-transactions', async (req, res) => {
 // POS/Sales APIs
 
 // Get all sales
-app.get('/api/sales', async (req, res) => {
+app.get('/api/sales', authenticateToken, branchFilter, async (req, res) => {
   try {
-    const [sales] = await pool.execute(`
-      SELECT * FROM sales
-      ORDER BY created_at DESC
-    `);
+    let query = `
+      SELECT s.*, u.name as created_by_name 
+      FROM sales s
+      LEFT JOIN users u ON s.created_by = u.id
+      WHERE 1=1
+    `;
     
+    const params = [];
+    
+    // If branch_id is set, filter by it
+    if (req.branch_id) {
+      query += ` AND (s.branch_id = ? OR s.branch_id IS NULL)`;
+      params.push(req.branch_id);
+    }
+    
+    query += ` ORDER BY s.created_at DESC`;
+    
+    const [sales] = await pool.query(query, params);
     res.json(sales);
   } catch (error) {
     console.error('Error fetching sales:', error);
-    res.status(500).json({ error: 'Failed to fetch sales' });
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
@@ -1112,99 +1154,103 @@ app.get('/api/sales/:id', async (req, res) => {
 });
 
 // Create a new sale
-app.post('/api/sales', async (req, res) => {
-  // Start a transaction to ensure all operations succeed or fail together
-  const connection2 = await mysql.createConnection({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: 'flexigym'
-  });
-  
-  await connection2.beginTransaction();
-  
+app.post('/api/sales', authenticateToken, branchFilter, async (req, res) => {
   try {
     const { 
       items, 
       subtotal, 
-      tax = 0, 
-      discount = 0, 
+      tax, 
+      discount, 
       total, 
-      paymentMethod = 'cash',
-      customer_id = null,
-      customer_name = null,
-      customer_email = null,
-      created_by = null
+      payment_method, 
+      customer_id, 
+      customer_name,
+      customer_email
     } = req.body;
     
-    // Validate required fields
+    // Validate data
     if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: 'Sale must have at least one item' });
+      return res.status(400).json({ message: 'No items provided for sale' });
     }
     
-    if (subtotal === undefined || total === undefined) {
-      return res.status(400).json({ error: 'Missing required fields: subtotal and total are required' });
+    if (!payment_method) {
+      return res.status(400).json({ message: 'Payment method is required' });
     }
     
-    // Parse numeric values to ensure they're numbers
-    const parsedSubtotal = parseFloat(subtotal);
-    const parsedTax = parseFloat(tax);
-    const parsedDiscount = parseFloat(discount);
-    const parsedTotal = parseFloat(total);
+    // Get user ID from token
+    const userID = req.user.id;
     
-    // Insert sale record
-    const [saleResult] = await connection2.execute(`
-      INSERT INTO sales 
-      (subtotal, tax, discount, total, payment_method, customer_id, customer_name, customer_email, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [parsedSubtotal, parsedTax, parsedDiscount, parsedTotal, paymentMethod, customer_id, customer_name, customer_email, created_by]);
+    // Begin transaction
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
     
-    const saleId = saleResult.insertId;
-    
-    // Insert each sale item and create inventory transactions
-    for (const item of items) {
-      const itemId = parseInt(item.itemId, 10);
-      const quantity = parseInt(item.quantity, 10);
-      const price = parseFloat(item.price);
-      const totalPrice = parseFloat(item.totalPrice);
+    try {
+      // Create sale record
+      const [result] = await connection.query(
+        'INSERT INTO sales (subtotal, tax, discount, total, payment_method, customer_id, customer_name, customer_email, created_by, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          subtotal, 
+          tax, 
+          discount || 0, 
+          total, 
+          payment_method, 
+          customer_id || null, 
+          customer_name || null,
+          customer_email || null, 
+          userID,
+          req.branch_id || null
+        ]
+      );
       
-      // Add sale item
-      await connection2.execute(`
-        INSERT INTO sale_items 
-        (sale_id, item_id, quantity, price, total)
-        VALUES (?, ?, ?, ?, ?)
-      `, [saleId, itemId, quantity, price, totalPrice]);
+      const saleId = result.insertId;
       
-      // Update inventory quantity
-      await connection2.execute(`
-        UPDATE inventory_items
-        SET quantity = quantity - ?
-        WHERE id = ?
-      `, [quantity, itemId]);
+      // Process each item
+      for (const item of items) {
+        // Add item to sale_items
+        await connection.query(
+          'INSERT INTO sale_items (sale_id, item_id, quantity, price, total) VALUES (?, ?, ?, ?, ?)',
+          [saleId, item.id, item.quantity, item.price, item.total]
+        );
+        
+        // Update inventory quantity
+        await connection.query(
+          'UPDATE inventory_items SET quantity = quantity - ? WHERE id = ?',
+          [item.quantity, item.id]
+        );
+        
+        // Record inventory transaction
+        await connection.query(
+          'INSERT INTO inventory_transactions (item_id, type, quantity, price, total_amount, notes, created_by, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [
+            item.id, 
+            'sale', 
+            item.quantity, 
+            item.price, 
+            item.total, 
+            `Sale #${saleId}`,
+            userID,
+            req.branch_id || null
+          ]
+        );
+      }
       
-      // Create inventory transaction for the sale
-      await connection2.execute(`
-        INSERT INTO inventory_transactions 
-        (item_id, type, quantity, price, total_amount, notes, created_by)
-        VALUES (?, 'sale', ?, ?, ?, ?, ?)
-      `, [itemId, quantity, price, totalPrice, `Sale ID: ${saleId}`, created_by]);
+      // Commit transaction
+      await connection.commit();
+      
+      res.status(201).json({ 
+        id: saleId,
+        message: 'Sale completed successfully'
+      });
+    } catch (error) {
+      // Rollback on error
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
     }
-    
-    // Commit the transaction
-    await connection2.commit();
-    
-    res.status(201).json({ 
-      success: true, 
-      message: 'Sale created successfully',
-      saleId 
-    });
   } catch (error) {
-    // Rollback if there's an error
-    await connection2.rollback();
-    console.error('Error creating sale:', error);
-    res.status(500).json({ error: 'Failed to create sale: ' + error.message });
-  } finally {
-    connection2.end();
+    console.error('Error processing sale:', error);
+    res.status(500).json({ message: 'Error processing sale', error: error.message });
   }
 });
 
@@ -2022,6 +2068,162 @@ app.delete('/api/branches/:id', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error deleting branch:', error);
     res.status(500).json({ error: 'Failed to delete branch' });
+  }
+});
+
+// ======================= USER-BRANCH ROUTES =======================
+
+// Get user's branches
+app.get('/api/users/:userId/branches', authenticateToken, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    // Check if user exists
+    const [users] = await pool.query('SELECT id FROM users WHERE id = ?', [userId]);
+    if (users.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Get user's branches with company info
+    const [branches] = await pool.query(`
+      SELECT ub.id, ub.user_id, ub.branch_id, 
+             b.name as branch_name, b.is_main, 
+             c.id as company_id, c.name as company_name
+      FROM user_branches ub
+      JOIN branches b ON ub.branch_id = b.id
+      JOIN companies c ON b.company_id = c.id
+      WHERE ub.user_id = ?
+      ORDER BY c.name, b.name
+    `, [userId]);
+    
+    res.json(branches);
+  } catch (error) {
+    console.error('Error fetching user branches:', error);
+    res.status(500).json({ error: 'Failed to fetch user branches' });
+  }
+});
+
+// Assign branch to user
+app.post('/api/users/:userId/branches', authenticateToken, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { branchId } = req.body;
+    
+    if (!branchId) {
+      return res.status(400).json({ error: 'Branch ID is required' });
+    }
+    
+    // Check if user exists
+    const [users] = await pool.query('SELECT id FROM users WHERE id = ?', [userId]);
+    if (users.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Check if branch exists
+    const [branches] = await pool.query('SELECT id FROM branches WHERE id = ?', [branchId]);
+    if (branches.length === 0) {
+      return res.status(404).json({ error: 'Branch not found' });
+    }
+    
+    // Check if assignment already exists
+    const [existingAssignments] = await pool.query(
+      'SELECT id FROM user_branches WHERE user_id = ? AND branch_id = ?',
+      [userId, branchId]
+    );
+    
+    if (existingAssignments.length > 0) {
+      return res.status(400).json({ error: 'Branch already assigned to this user' });
+    }
+    
+    // Create assignment
+    await pool.query(
+      'INSERT INTO user_branches (user_id, branch_id) VALUES (?, ?)',
+      [userId, branchId]
+    );
+    
+    res.status(201).json({ message: 'Branch assigned to user successfully' });
+  } catch (error) {
+    console.error('Error assigning branch to user:', error);
+    res.status(500).json({ error: 'Failed to assign branch to user' });
+  }
+});
+
+// Remove branch assignment from user
+app.delete('/api/users/:userId/branches/:branchId', authenticateToken, async (req, res) => {
+  try {
+    const { userId, branchId } = req.params;
+    
+    // Check if assignment exists
+    const [existingAssignments] = await pool.query(
+      'SELECT id FROM user_branches WHERE user_id = ? AND branch_id = ?',
+      [userId, branchId]
+    );
+    
+    if (existingAssignments.length === 0) {
+      return res.status(404).json({ error: 'Branch assignment not found' });
+    }
+    
+    // Delete assignment
+    await pool.query(
+      'DELETE FROM user_branches WHERE user_id = ? AND branch_id = ?',
+      [userId, branchId]
+    );
+    
+    // If this was the user's selected branch, unset it
+    await pool.query(
+      'UPDATE users SET selected_branch_id = NULL WHERE id = ? AND selected_branch_id = ?',
+      [userId, branchId]
+    );
+    
+    res.json({ message: 'Branch assignment removed successfully' });
+  } catch (error) {
+    console.error('Error removing branch assignment:', error);
+    res.status(500).json({ error: 'Failed to remove branch assignment' });
+  }
+});
+
+// Set user's selected branch
+app.put('/api/users/:userId/selected-branch', authenticateToken, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { branchId } = req.body;
+    
+    if (!branchId) {
+      return res.status(400).json({ error: 'Branch ID is required' });
+    }
+    
+    // Check if user exists
+    const [users] = await pool.query('SELECT id FROM users WHERE id = ?', [userId]);
+    if (users.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Check if branch exists
+    const [branches] = await pool.query('SELECT id FROM branches WHERE id = ?', [branchId]);
+    if (branches.length === 0) {
+      return res.status(404).json({ error: 'Branch not found' });
+    }
+    
+    // Check if branch is assigned to user
+    const [assignments] = await pool.query(
+      'SELECT id FROM user_branches WHERE user_id = ? AND branch_id = ?',
+      [userId, branchId]
+    );
+    
+    if (assignments.length === 0) {
+      return res.status(400).json({ error: 'Branch is not assigned to this user' });
+    }
+    
+    // Update user's selected branch
+    await pool.query(
+      'UPDATE users SET selected_branch_id = ? WHERE id = ?',
+      [branchId, userId]
+    );
+    
+    res.json({ message: 'Selected branch updated successfully' });
+  } catch (error) {
+    console.error('Error updating selected branch:', error);
+    res.status(500).json({ error: 'Failed to update selected branch' });
   }
 });
 

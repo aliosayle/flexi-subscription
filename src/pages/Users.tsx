@@ -33,18 +33,21 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   User, 
   Shield, 
   Trash2, 
   Edit2, 
   Plus,
-  AlertCircle
+  AlertCircle,
+  Building2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/axios';
 import { useAuth } from '@/contexts/AuthContext';
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 
 interface User {
   id: string;
@@ -56,6 +59,7 @@ interface User {
   permissions: string;
   created_at: string;
   password?: string;
+  selected_branch_id?: number | null;
 }
 
 interface Role {
@@ -82,6 +86,23 @@ interface CurrentUser {
   created_at: string;
 }
 
+interface Branch {
+  id: number;
+  name: string;
+  company_id: number;
+  company_name: string;
+}
+
+interface UserBranch {
+  id: number;
+  user_id: string;
+  branch_id: number;
+  branch_name: string;
+  company_id: number;
+  company_name: string;
+  is_main: boolean;
+}
+
 const Users = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -89,9 +110,13 @@ const Users = () => {
   const [loading, setLoading] = useState(true);
   const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
   const [isPermissionsDialogOpen, setIsPermissionsDialogOpen] = useState(false);
+  const [isBranchDialogOpen, setIsBranchDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [selectedPermissions, setSelectedPermissions] = useState<number[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [userBranches, setUserBranches] = useState<UserBranch[]>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState<string>("");
   
   const { user: currentUser, token } = useAuth();
   
@@ -102,13 +127,15 @@ const Users = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [usersRes, rolesRes] = await Promise.all([
+      const [usersRes, rolesRes, branchesRes] = await Promise.all([
         api.get<User[]>('/api/users'),
-        api.get<Role[]>('/api/roles')
+        api.get<Role[]>('/api/roles'),
+        api.get<Branch[]>('/api/branches')
       ]);
       
       setUsers(usersRes.data);
       setRoles(rolesRes.data);
+      setBranches(branchesRes.data);
       
       // Extract unique permissions from roles
       const allPermissions = rolesRes.data.reduce((acc: Permission[], role: Role) => {
@@ -206,6 +233,47 @@ const Users = () => {
     }
   };
   
+  const handleFetchUserBranches = async (userId: string) => {
+    try {
+      const response = await api.get(`/api/users/${userId}/branches`);
+      setUserBranches(response.data);
+    } catch (error) {
+      console.error('Error fetching user branches:', error);
+      toast.error('Failed to load user branches');
+    }
+  };
+
+  const handleAssignBranch = async () => {
+    if (!selectedUser?.id || !selectedBranchId) {
+      toast.error('Please select a branch');
+      return;
+    }
+
+    try {
+      await api.post(`/api/users/${selectedUser.id}/branches`, {
+        branchId: selectedBranchId
+      });
+      
+      toast.success('Branch assigned successfully');
+      await handleFetchUserBranches(selectedUser.id);
+      setSelectedBranchId("");
+    } catch (error: any) {
+      console.error('Error assigning branch:', error);
+      toast.error(error.response?.data?.error || 'Failed to assign branch');
+    }
+  };
+
+  const handleRemoveBranch = async (userId: string, branchId: number) => {
+    try {
+      await api.delete(`/api/users/${userId}/branches/${branchId}`);
+      toast.success('Branch removed successfully');
+      await handleFetchUserBranches(userId);
+    } catch (error) {
+      console.error('Error removing branch:', error);
+      toast.error('Failed to remove branch');
+    }
+  };
+  
   const canManageUsers = currentUser?.role_name === 'admin' || currentUser?.role_name === 'super_admin';
   
   if (!canManageUsers) {
@@ -269,6 +337,7 @@ const Users = () => {
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Permissions</TableHead>
+                  <TableHead>Branches</TableHead>
                   <TableHead>Created At</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -301,6 +370,20 @@ const Users = () => {
                           </span>
                         ))}
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        className="h-8 px-2"
+                        onClick={() => {
+                          setSelectedUser(user);
+                          handleFetchUserBranches(user.id);
+                          setIsBranchDialogOpen(true);
+                        }}
+                      >
+                        <Building2 className="h-4 w-4 mr-2" />
+                        Manage
+                      </Button>
                     </TableCell>
                     <TableCell>
                       {new Date(user.created_at).toLocaleDateString()}
@@ -489,6 +572,90 @@ const Users = () => {
               Update Permissions
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Branch Assignment Dialog */}
+      <Dialog open={isBranchDialogOpen} onOpenChange={setIsBranchDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Manage User Branches</DialogTitle>
+            <DialogDescription>
+              Assign branches to {selectedUser?.name}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4 space-y-6">
+            <div className="space-y-4">
+              <h3 className="text-sm font-medium">Assigned Branches</h3>
+              
+              {userBranches.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-2">
+                  No branches assigned to this user yet
+                </div>
+              ) : (
+                <ScrollArea className="h-48 border rounded-md p-4">
+                  <div className="space-y-2">
+                    {userBranches.map((branch) => (
+                      <div 
+                        key={branch.branch_id} 
+                        className="flex items-center justify-between border-b pb-2"
+                      >
+                        <div>
+                          <p className="font-medium">{branch.branch_name}</p>
+                          <p className="text-sm text-muted-foreground">{branch.company_name}</p>
+                          {branch.is_main && (
+                            <Badge variant="secondary" className="mt-1">
+                              Main Branch
+                            </Badge>
+                          )}
+                          {selectedUser?.selected_branch_id === branch.branch_id && (
+                            <Badge className="mt-1 ml-2">
+                              Currently Selected
+                            </Badge>
+                          )}
+                        </div>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleRemoveBranch(selectedUser!.id, branch.branch_id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </div>
+            
+            <div className="space-y-4 border-t pt-4">
+              <h3 className="text-sm font-medium">Assign New Branch</h3>
+              
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <Label htmlFor="branch">Branch</Label>
+                  <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a branch" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {branches
+                        .filter(branch => !userBranches.some(ub => ub.branch_id === branch.id))
+                        .map((branch) => (
+                          <SelectItem key={branch.id} value={branch.id.toString()}>
+                            {branch.name} ({branch.company_name})
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button onClick={handleAssignBranch}>
+                  Assign
+                </Button>
+              </div>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
