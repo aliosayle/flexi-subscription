@@ -56,9 +56,11 @@ const authLimiter = rateLimit({
   message: 'Too many login attempts, please try again later.'
 });
 
-// COMPLETELY DISABLE CORS - set before any other middleware
+// CORS configuration - allow credentials with specific origin
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
+  // Allow the specific origin
+  const origin = req.headers.origin;
+  res.header('Access-Control-Allow-Origin', origin || 'http://161.97.177.233:8080');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   res.header('Access-Control-Allow-Credentials', 'true');
@@ -70,9 +72,13 @@ app.use((req, res, next) => {
   next();
 });
 
-// CORS middleware (as backup to the raw header setting above)
+// Update CORS middleware config too
 app.use(cors({
-  origin: '*',  // Allow all origins
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, etc)
+    if(!origin) return callback(null, true);
+    return callback(null, origin);
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   credentials: true,

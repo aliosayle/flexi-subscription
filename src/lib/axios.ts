@@ -5,7 +5,7 @@ const API_BASE_URL = 'http://161.97.177.233:5000';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  withCredentials: true,
+  withCredentials: true,  // This is needed for cookies/auth to work with CORS
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json'
