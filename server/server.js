@@ -58,11 +58,16 @@ const authLimiter = rateLimit({
 
 // CORS configuration
 app.use(cors({
-  origin: ['http://localhost:8080', 'http://192.168.10.70:8080', 'http://161.97.177.233:8080', 'http://172.18.0.1:8080'],
+  origin: '*', // Allow all origins in development
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
+  credentials: true,
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 }));
+
+// Handle preflight requests
+app.options('*', cors());
 
 // Parse JSON bodies with size limit
 app.use(express.json({ limit: '10kb' }));
