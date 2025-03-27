@@ -1,11 +1,15 @@
 import axios from 'axios';
 
-// Use window.location.hostname to dynamically get the server address
-// This makes the app work regardless of where it's hosted
+// Use relative URLs in development to leverage Vite's proxy
+// In production, use the full URL with hostname
 const getBaseUrl = () => {
-  // Production server on same host but different port
-  // Using the same hostname as the client but port 5000
-  return `http://${window.location.hostname}:5000`;
+  if (import.meta.env.DEV) {
+    // When in development, use relative URLs which will be proxied by the Vite dev server
+    return '/api';
+  } else {
+    // When in production, use the same hostname as the client but port 5000
+    return `http://${window.location.hostname}:5000/api`;
+  }
 };
 
 export const api = axios.create({
