@@ -71,15 +71,17 @@ const POS = () => {
     try {
       setLoading(true);
       const response = await api.get('/api/inventory');
-      // Ensure prices are numbers
+      
+      // Ensure prices are properly parsed as numbers
       const formattedItems = response.data.map(item => ({
         ...item,
-        price: parseFloat(item.price),
-        cost: parseFloat(item.cost)
+        price: typeof item.price === 'string' ? parseFloat(item.price) : item.price,
+        cost: typeof item.cost === 'string' ? parseFloat(item.cost) : item.cost
       }));
+      
       setItems(formattedItems);
     } catch (error) {
-      console.error('Error fetching items:', error);
+      console.error('Error fetching inventory items:', error);
       toast.error('Failed to fetch items');
     } finally {
       setLoading(false);
@@ -116,46 +118,51 @@ const POS = () => {
   };
 
   const handleAddToCart = (item: InventoryItem) => {
-    // Check if the item has enough quantity in stock
     if (item.quantity <= 0) {
-      toast.error(`${item.name} is out of stock`);
+      toast.error('This item is out of stock');
       return;
     }
     
-    const existingCartItem = cartItems.find(cartItem => cartItem.itemId === item.id);
+    // Ensure price is a number
+    const itemPrice = typeof item.price === 'string' ? parseFloat(item.price) : item.price;
     
-    if (existingCartItem) {
-      // Check if adding more would exceed available quantity
-      if (existingCartItem.quantity + 1 > item.quantity) {
-        toast.error(`Not enough ${item.name} in stock`);
+    // Check if item already exists in cart
+    const existingItemIndex = cartItems.findIndex(cartItem => cartItem.itemId === item.id);
+    
+    if (existingItemIndex >= 0) {
+      // Update quantity of existing item
+      const updatedCartItems = [...cartItems];
+      const existingItem = updatedCartItems[existingItemIndex];
+      
+      // Check if we have enough stock
+      const totalQuantity = existingItem.quantity + 1;
+      if (totalQuantity > item.quantity) {
+        toast.error('Not enough stock available');
         return;
       }
       
-      // Update quantity if the item is already in the cart
-      setCartItems(cartItems.map(cartItem => 
-        cartItem.itemId === item.id 
-          ? {
-              ...cartItem,
-              quantity: cartItem.quantity + 1,
-              totalPrice: (cartItem.quantity + 1) * cartItem.price
-            }
-          : cartItem
-      ));
+      updatedCartItems[existingItemIndex] = {
+        ...existingItem,
+        quantity: totalQuantity,
+        totalPrice: itemPrice * totalQuantity
+      };
+      
+      setCartItems(updatedCartItems);
+      toast.success('Updated quantity in cart');
     } else {
-      // Add new item to the cart
-      const newCartItem: CartItem = {
+      // Add new item to cart
+      const newCartItem = {
         id: Date.now().toString(),
         itemId: item.id,
         name: item.name,
-        price: item.price,
+        price: itemPrice,
         quantity: 1,
-        totalPrice: item.price
+        totalPrice: itemPrice
       };
       
       setCartItems([...cartItems, newCartItem]);
+      toast.success('Added to cart');
     }
-    
-    toast.success(`Added ${item.name} to cart`);
   };
 
   const handleUpdateQuantity = (id: string, change: number) => {

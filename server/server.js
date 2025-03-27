@@ -524,46 +524,44 @@ function branchFilter(req, res, next) {
   next();
 }
 
-// Get all inventory items
-app.get('/api/inventory', authenticateToken, branchFilter, async (req, res) => {
+// Get inventory items with pagination
+app.get(['/api/inventory', '/api/inventory/items'], authenticateToken, branchFilter, async (req, res) => {
   try {
     let query = `
-      SELECT * FROM inventory_items
-      WHERE 1=1
+      SELECT i.*, c.name as category_name
+      FROM inventory_items i
+      LEFT JOIN inventory_categories c ON i.category_id = c.id
+      WHERE i.branch_id = ?
+      OR i.branch_id IS NULL
     `;
-    
-    const params = [];
-    
-    // If branch_id is set, filter by it
-    if (req.branch_id) {
-      query += ` AND (branch_id = ? OR branch_id IS NULL)`;
-      params.push(req.branch_id);
-    }
-    
-    query += ` ORDER BY name`;
-    
-    const [items] = await pool.query(query, params);
-    
-    // Format response to ensure numeric values are numbers
+
+    const [items] = await pool.execute(query, [req.branch_id]);
+
+    // Format response
     const formattedItems = items.map(item => ({
       id: item.id.toString(),
       name: item.name,
       description: item.description || '',
-      sku: item.sku,
+      sku: item.sku || '',
       barcode: item.barcode || '',
-      quantity: parseInt(item.quantity, 10),
-      price: parseFloat(item.price),
-      cost: parseFloat(item.cost),
-      category: item.category || '',
-      imageSrc: item.image_src || 'https://placehold.co/100x100',
+      quantity: parseInt(item.quantity) || 0,
+      price: parseFloat(item.price) || 0,
+      cost: parseFloat(item.cost) || 0,
+      category: item.category_name || 'Uncategorized',
+      categoryId: item.category_id ? item.category_id.toString() : null,
+      imageSrc: item.image || null,
       createdAt: item.created_at,
       updatedAt: item.updated_at
     }));
-    
+
     res.json(formattedItems);
   } catch (error) {
     console.error('Error fetching inventory items:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message,
+      details: error.stack 
+    });
   }
 });
 
@@ -807,30 +805,20 @@ app.get('/api/inventory/items/:id/transactions', async (req, res) => {
   }
 });
 
-// Get all inventory transactions
-app.get('/api/inventory/transactions', authenticateToken, branchFilter, async (req, res) => {
+// Get all inventory transactions with pagination
+app.get(['/api/inventory/transactions', '/api/transactions'], authenticateToken, branchFilter, async (req, res) => {
   try {
-    // Get transactions with item and user info
     let query = `
       SELECT t.*, i.name as item_name, i.sku as item_sku, u.name as created_by_name
       FROM inventory_transactions t
       JOIN inventory_items i ON t.item_id = i.id
       LEFT JOIN users u ON t.created_by = u.id
-      WHERE 1=1
+      WHERE t.branch_id = ? OR t.branch_id IS NULL
+      ORDER BY t.created_at DESC
     `;
-    
-    const params = [];
-    
-    // If branch_id is set, filter by it
-    if (req.branch_id) {
-      query += ` AND (t.branch_id = ? OR t.branch_id IS NULL)`;
-      params.push(req.branch_id);
-    }
-    
-    query += ` ORDER BY t.created_at DESC LIMIT 100`;
-    
-    const [transactions] = await pool.query(query, params);
-    
+
+    const [transactions] = await pool.execute(query, [req.branch_id]);
+
     // Format response
     const formattedTransactions = transactions.map(transaction => ({
       id: transaction.id.toString(),
@@ -838,9 +826,9 @@ app.get('/api/inventory/transactions', authenticateToken, branchFilter, async (r
       itemName: transaction.item_name,
       itemSku: transaction.item_sku,
       type: transaction.type,
-      quantity: parseInt(transaction.quantity, 10),
+      quantity: parseInt(transaction.quantity) || 0,
       price: transaction.price ? parseFloat(transaction.price) : null,
-      totalAmount: parseFloat(transaction.total_amount),
+      totalAmount: parseFloat(transaction.total_amount) || 0,
       notes: transaction.notes || '',
       customerSupplier: transaction.customer_supplier || '',
       paymentStatus: transaction.payment_status || '',
@@ -848,16 +836,20 @@ app.get('/api/inventory/transactions', authenticateToken, branchFilter, async (r
       createdByName: transaction.created_by_name || 'System',
       createdAt: transaction.created_at
     }));
-    
+
     res.json(formattedTransactions);
   } catch (error) {
     console.error('Error fetching inventory transactions:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message,
+      details: error.stack 
+    });
   }
 });
 
 // Create inventory transaction (adjustment)
-app.post('/api/inventory/transactions', async (req, res) => {
+app.post(['/api/inventory/transactions', '/api/transactions'], authenticateToken, branchFilter, async (req, res) => {
   try {
     const { itemId, type, quantity, price, notes, customerSupplier, paymentStatus, created_by } = req.body;
     
@@ -892,8 +884,8 @@ app.post('/api/inventory/transactions', async (req, res) => {
     
     // Create transaction
     const [result] = await pool.execute(
-      'INSERT INTO inventory_transactions (item_id, type, quantity, price, total_amount, notes, customer_supplier, payment_status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [itemId, type, quantity, transactionPrice, totalAmount, notes || '', customerSupplier || '', paymentStatus || '', created_by || null]
+      'INSERT INTO inventory_transactions (item_id, type, quantity, price, total_amount, notes, customer_supplier, payment_status, created_by, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [itemId, type, quantity, transactionPrice, totalAmount, notes || '', customerSupplier || '', paymentStatus || '', created_by || null, req.branch_id || null]
     );
     
     // Update item quantity
@@ -940,7 +932,7 @@ app.post('/api/inventory/transactions', async (req, res) => {
 });
 
 // Create multi-item transaction (bulk purchase/sale)
-app.post('/api/inventory/bulk-transactions', async (req, res) => {
+app.post(['/api/inventory/bulk-transactions', '/api/bulk-transactions'], authenticateToken, branchFilter, async (req, res) => {
   try {
     const { type, items, notes, customerSupplier, paymentStatus } = req.body;
     
@@ -992,10 +984,10 @@ app.post('/api/inventory/bulk-transactions', async (req, res) => {
         const transactionPrice = price || (type === 'sale' ? inventoryItem.price : inventoryItem.cost);
         const totalAmount = transactionPrice * quantity;
         
-        // Create transaction with null created_by
+        // Create transaction
         const [result] = await connection.execute(
-          'INSERT INTO inventory_transactions (item_id, type, quantity, price, total_amount, notes, customer_supplier, payment_status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)',
-          [itemId, type, quantity, transactionPrice, totalAmount, notes || '', customerSupplier || '', paymentStatus || '']
+          'INSERT INTO inventory_transactions (item_id, type, quantity, price, total_amount, notes, customer_supplier, payment_status, created_by, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [itemId, type, quantity, transactionPrice, totalAmount, notes || '', customerSupplier || '', paymentStatus || '', req.user?.id || null, req.branch_id || null]
         );
         
         // Update item quantity
@@ -1019,7 +1011,7 @@ app.post('/api/inventory/bulk-transactions', async (req, res) => {
           itemSku: transaction.item_sku,
           type: transaction.type,
           quantity: transaction.quantity,
-          price: transaction.price ? parseFloat(transaction.price) : null,
+          price: parseFloat(transaction.price),
           totalAmount: parseFloat(transaction.total_amount),
           notes: transaction.notes || '',
           customerSupplier: transaction.customer_supplier || '',
@@ -1028,20 +1020,22 @@ app.post('/api/inventory/bulk-transactions', async (req, res) => {
         });
       }
       
-      // Commit the transaction
+      // Commit transaction
       await connection.commit();
       
-      res.status(201).json(createdTransactions);
+      res.status(201).json({
+        success: true,
+        transactions: createdTransactions
+      });
     } catch (error) {
-      // Rollback the transaction
+      // Rollback on error
       await connection.rollback();
       throw error;
     } finally {
-      // Release the connection
       connection.release();
     }
   } catch (error) {
-    console.error('Error creating bulk inventory transaction:', error);
+    console.error('Error creating bulk transaction:', error);
     res.status(500).json({ 
       message: 'Server error', 
       error: error.message,
