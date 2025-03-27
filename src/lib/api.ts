@@ -5,10 +5,10 @@ import axios from 'axios';
 const getBaseUrl = () => {
   if (import.meta.env.DEV) {
     // When in development, use relative URLs which will be proxied by the Vite dev server
-    return '/api';
+    return '';  // Remove /api to prevent duplication
   } else {
     // When in production, use the same hostname as the client but port 5000
-    return `http://${window.location.hostname}:5000/api`;
+    return `http://${window.location.hostname}:5000`;  // Remove /api to prevent duplication
   }
 };
 
