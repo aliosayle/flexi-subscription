@@ -621,7 +621,7 @@ const Inventory = () => {
                     if (!item) return null;
                     
                     return (
-                      <TableRow key={transaction.id}>
+                      <TableRow key={`transaction-${transaction.id}`}>
                         <TableCell>
                           {new Date(transaction.createdAt).toLocaleDateString()}
                         </TableCell>
