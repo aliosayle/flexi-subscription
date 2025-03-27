@@ -253,9 +253,9 @@ app.post('/api/auth/register', async (req, res) => {
 
 // Package routes
 // Get all packages
-app.get('/api/packages', async (req, res) => {
+app.get('/api/packages', authenticateToken, branchFilter, async (req, res) => {
   try {
-    const [packages] = await pool.query('SELECT * FROM packages');
+    const [packages] = await pool.query('SELECT * FROM packages WHERE branch_id = ? OR branch_id IS NULL', [req.branch_id]);
     
     // Parse features from JSON string to array with error handling
     const formattedPackages = packages.map(pkg => {
@@ -286,6 +286,7 @@ app.get('/api/packages', async (req, res) => {
         price: parseFloat(pkg.price),
         features: parsedFeatures,
         isPopular: pkg.is_popular === 1,
+        branchId: pkg.branch_id ? pkg.branch_id.toString() : null,
         createdAt: pkg.created_at,
         updatedAt: pkg.updated_at
       };
@@ -351,19 +352,22 @@ app.get('/api/packages/:id', async (req, res) => {
 });
 
 // Create package
-app.post('/api/packages', async (req, res) => {
+app.post('/api/packages', authenticateToken, branchFilter, async (req, res) => {
   try {
-    const { name, description, days, price, features, isPopular } = req.body;
+    const { name, description, days, price, features, isPopular, branch_id } = req.body;
     
     // Validate required fields
     if (!name || !days || price === undefined || !features || !Array.isArray(features)) {
       return res.status(400).json({ message: 'Missing required fields' });
     }
     
+    // Use the branch_id from request or from the branchFilter middleware
+    const branchId = branch_id || req.branch_id;
+    
     // Insert new package
     const [result] = await pool.execute(
-      'INSERT INTO packages (name, description, days, price, features, is_popular) VALUES (?, ?, ?, ?, ?, ?)',
-      [name, description || '', days, price, JSON.stringify(features), isPopular || false]
+      'INSERT INTO packages (name, description, days, price, features, is_popular, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [name, description || '', days, price, JSON.stringify(features), isPopular || false, branchId]
     );
     
     // Get the newly created package
@@ -398,6 +402,7 @@ app.post('/api/packages', async (req, res) => {
       price: parseFloat(pkg.price),
       features: parsedFeatures,
       isPopular: pkg.is_popular === 1,
+      branchId: pkg.branch_id ? pkg.branch_id.toString() : null,
       createdAt: pkg.created_at,
       updatedAt: pkg.updated_at
     };
@@ -410,18 +415,24 @@ app.post('/api/packages', async (req, res) => {
 });
 
 // Update package
-app.put('/api/packages/:id', async (req, res) => {
+app.put('/api/packages/:id', authenticateToken, branchFilter, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, days, price, features, isPopular } = req.body;
+    const { name, description, days, price, features, isPopular, branch_id } = req.body;
     
     // Validate required fields
     if (!name || !days || price === undefined || !features || !Array.isArray(features)) {
       return res.status(400).json({ message: 'Missing required fields' });
     }
     
-    // Check if package exists
-    const [existingPackages] = await pool.execute('SELECT * FROM packages WHERE id = ?', [id]);
+    // Use the branch_id from request or from the branchFilter middleware
+    const branchId = branch_id || req.branch_id;
+    
+    // Check if package exists and belongs to this branch
+    const [existingPackages] = await pool.execute(
+      'SELECT * FROM packages WHERE id = ? AND (branch_id = ? OR branch_id IS NULL)', 
+      [id, req.branch_id]
+    );
     
     if (existingPackages.length === 0) {
       return res.status(404).json({ message: 'Package not found' });
@@ -429,8 +440,8 @@ app.put('/api/packages/:id', async (req, res) => {
     
     // Update package
     await pool.execute(
-      'UPDATE packages SET name = ?, description = ?, days = ?, price = ?, features = ?, is_popular = ? WHERE id = ?',
-      [name, description || '', days, price, JSON.stringify(features), isPopular || false, id]
+      'UPDATE packages SET name = ?, description = ?, days = ?, price = ?, features = ?, is_popular = ?, branch_id = ? WHERE id = ?',
+      [name, description || '', days, price, JSON.stringify(features), isPopular || false, branchId, id]
     );
     
     // Get updated package
@@ -465,6 +476,7 @@ app.put('/api/packages/:id', async (req, res) => {
       price: parseFloat(pkg.price),
       features: parsedFeatures,
       isPopular: pkg.is_popular === 1,
+      branchId: pkg.branch_id ? pkg.branch_id.toString() : null,
       createdAt: pkg.created_at,
       updatedAt: pkg.updated_at
     };
@@ -477,12 +489,15 @@ app.put('/api/packages/:id', async (req, res) => {
 });
 
 // Delete package
-app.delete('/api/packages/:id', async (req, res) => {
+app.delete('/api/packages/:id', authenticateToken, branchFilter, async (req, res) => {
   try {
     const { id } = req.params;
     
-    // Check if package exists
-    const [existingPackages] = await pool.execute('SELECT * FROM packages WHERE id = ?', [id]);
+    // Check if package exists and belongs to this branch
+    const [existingPackages] = await pool.execute(
+      'SELECT * FROM packages WHERE id = ? AND (branch_id = ? OR branch_id IS NULL)', 
+      [id, req.branch_id]
+    );
     
     if (existingPackages.length === 0) {
       return res.status(404).json({ message: 'Package not found' });
@@ -494,7 +509,7 @@ app.delete('/api/packages/:id', async (req, res) => {
     res.json({ message: 'Package deleted successfully' });
   } catch (error) {
     console.error('Error deleting package:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 

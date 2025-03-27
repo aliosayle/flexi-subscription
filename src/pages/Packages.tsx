@@ -40,13 +40,16 @@ import {
   TableRow 
 } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Check, Plus, Pencil, Trash2, Package, Loader2 } from 'lucide-react';
+import { Check, Plus, Pencil, Trash2, Package, Loader2, Building2 } from 'lucide-react';
 import { SubscriptionPackage } from '@/types';
 import { Link } from "react-router-dom";
 import api from '@/lib/axios';
 import { Switch } from '@/components/ui/switch';
+import { useAuth } from '@/contexts/AuthContext';
+import { Badge } from '@/components/ui/badge';
 
 const Packages = () => {
+  const { selectedBranch } = useAuth();
   const [packages, setPackages] = useState<SubscriptionPackage[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<SubscriptionPackage | null>(null);
@@ -64,79 +67,125 @@ const Packages = () => {
   // Fetch packages from API
   const fetchPackages = async () => {
     try {
+      setLoading(true);
       const response = await api.get('/api/packages');
       setPackages(response.data);
     } catch (error) {
       console.error('Error fetching packages:', error);
       toast.error('Failed to fetch packages');
+    } finally {
+      setLoading(false);
     }
   };
   
-  // Fetch packages on component mount
+  // Fetch packages on component mount and when branch changes
   useEffect(() => {
     fetchPackages();
-  }, []);
+  }, [selectedBranch]);
 
   const handleEditPackage = (pkg: SubscriptionPackage) => {
     setSelectedPackage(pkg);
+    setName(pkg.name);
+    setDescription(pkg.description || '');
+    setDays(pkg.days.toString());
+    setPrice(pkg.price.toString());
+    setFeatures(Array.isArray(pkg.features) ? pkg.features.join('\n') : '');
+    setIsPopular(pkg.isPopular || false);
     setIsEditMode(true);
     setDialogOpen(true);
   };
 
   const handleAddPackage = () => {
-    setSelectedPackage(null);
     setIsEditMode(false);
+    resetForm();
     setDialogOpen(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreatePackage = async () => {
+    if (!name || !price || !days) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    if (!selectedBranch) {
+      toast.error('Please select a branch first');
+      return;
+    }
+
     try {
-      if (selectedPackage) {
-        const response = await api.put(`/api/packages/${selectedPackage.id}`, {
-          name,
-          description,
-          days,
-          price,
-          features: features.split('\n').filter(f => f.trim()),
-          isPopular
-        });
-        toast.success('Package updated successfully');
-        setSelectedPackage(null);
-        fetchPackages();
-      } else {
-        const response = await api.post('/api/packages', {
-          name,
-          description,
-          days,
-          price,
-          features: features.split('\n').filter(f => f.trim()),
-          isPopular
-        });
-        toast.success('Package created successfully');
-        fetchPackages();
-      }
-      setName('');
-      setDescription('');
-      setDays('');
-      setPrice('');
-      setFeatures('');
-      setIsPopular(false);
+      setLoading(true);
+
+      const packageData = {
+        name,
+        description,
+        days: parseInt(days),
+        price: parseFloat(price),
+        features: features.split('\n'),
+        isPopular,
+        branch_id: selectedBranch.branch_id
+      };
+
+      const response = await api.post('/api/packages', packageData);
+      toast.success('Package created successfully');
+      fetchPackages();
+      setDialogOpen(false);
+      resetForm();
     } catch (error) {
-      console.error('Error saving package:', error);
-      toast.error('Failed to save package');
+      console.error('Error creating package:', error);
+      toast.error('Failed to create package');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleDeleteClick = (id: string) => {
+  const handleUpdatePackage = async () => {
+    if (!selectedPackage) return;
+    if (!name || !price || !days) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    if (!selectedBranch) {
+      toast.error('Please select a branch first');
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const packageData = {
+        name,
+        description,
+        days: parseInt(days),
+        price: parseFloat(price),
+        features: features.split('\n'),
+        isPopular,
+        branch_id: selectedBranch.branch_id
+      };
+
+      await api.put(`/api/packages/${selectedPackage.id}`, packageData);
+      toast.success('Package updated successfully');
+      fetchPackages();
+      setDialogOpen(false);
+      resetForm();
+    } catch (error) {
+      console.error('Error updating package:', error);
+      toast.error('Failed to update package');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeletePackage = (id: string) => {
     setPackageToDelete(id);
     setDeleteDialogOpen(true);
   };
 
-  const handleDeleteConfirm = async () => {
+  const handleConfirmDelete = async () => {
     if (!packageToDelete) return;
     
     try {
+      setLoading(true);
       await api.delete(`/api/packages/${packageToDelete}`);
       toast.success('Package deleted successfully');
       fetchPackages();
@@ -144,6 +193,7 @@ const Packages = () => {
       console.error('Error deleting package:', error);
       toast.error('Failed to delete package');
     } finally {
+      setLoading(false);
       setDeleteDialogOpen(false);
       setPackageToDelete(null);
     }
@@ -154,12 +204,27 @@ const Packages = () => {
     setPackageToDelete(null);
   };
 
+  const resetForm = () => {
+    setName('');
+    setDescription('');
+    setDays('');
+    setPrice('');
+    setFeatures('');
+    setIsPopular(false);
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Subscription Packages</h2>
-          <p className="text-muted-foreground">Manage your gym membership packages.</p>
+          {selectedBranch && (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Building2 className="h-4 w-4" />
+              <p>Branch: <span className="font-medium">{selectedBranch.name}</span></p>
+              <Badge variant="outline" className="ml-2">{selectedBranch.company_name}</Badge>
+            </div>
+          )}
         </div>
         <Button onClick={handleAddPackage} disabled={loading}>
           {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
@@ -179,7 +244,7 @@ const Packages = () => {
                 key={pkg.id} 
                 package={pkg} 
                 onEdit={() => handleEditPackage(pkg)}
-                onDelete={() => handleDeleteClick(pkg.id)}
+                onDelete={() => handleDeletePackage(pkg.id)}
                 disabled={loading}
               />
             ))}
@@ -219,7 +284,7 @@ const Packages = () => {
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          onClick={() => handleDeleteClick(pkg.id)}
+                          onClick={() => handleDeletePackage(pkg.id)}
                           disabled={loading}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -236,13 +301,14 @@ const Packages = () => {
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-[500px]">
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            isEditMode ? handleUpdatePackage() : handleCreatePackage();
+          }}>
             <DialogHeader>
               <DialogTitle>{isEditMode ? 'Edit Package' : 'Add New Package'}</DialogTitle>
               <DialogDescription>
-                {isEditMode 
-                  ? 'Update package details below. Click save when you\'re done.'
-                  : 'Fill in the package details below. Click save when you\'re done.'}
+                {isEditMode ? 'Update package details.' : 'Create a new subscription package.'}
               </DialogDescription>
             </DialogHeader>
             
@@ -333,14 +399,8 @@ const Packages = () => {
             
             <DialogFooter>
               <Button type="submit" disabled={loading}>
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {isEditMode ? 'Updating...' : 'Creating...'}
-                  </>
-                ) : (
-                  'Save'
-                )}
+                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {isEditMode ? 'Update Package' : 'Create Package'}
               </Button>
             </DialogFooter>
           </form>
@@ -359,7 +419,7 @@ const Packages = () => {
           <AlertDialogFooter>
             <AlertDialogCancel onClick={handleDeleteCancel} disabled={loading}>Cancel</AlertDialogCancel>
             <AlertDialogAction 
-              onClick={handleDeleteConfirm} 
+              onClick={handleConfirmDelete} 
               disabled={loading}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >

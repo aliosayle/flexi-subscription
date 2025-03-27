@@ -26,6 +26,8 @@ async function setupDatabase() {
     await connection.query('DROP TABLE IF EXISTS inventory_transactions');
     await connection.query('DROP TABLE IF EXISTS inventory_items');
     await connection.query('DROP TABLE IF EXISTS role_permissions');
+    await connection.query('DROP TABLE IF EXISTS subscriptions');
+    await connection.query('DROP TABLE IF EXISTS packages');
     await connection.query('DROP TABLE IF EXISTS branches');
     await connection.query('DROP TABLE IF EXISTS companies');
     await connection.query('DROP TABLE IF EXISTS users');
@@ -190,6 +192,47 @@ async function setupDatabase() {
       )
     `);
     console.log('Branches table created');
+
+    // Create packages table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS packages (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        name VARCHAR(100) NOT NULL,
+        description TEXT,
+        days INT NOT NULL,
+        price DECIMAL(10, 2) NOT NULL,
+        features TEXT,
+        is_popular BOOLEAN DEFAULT FALSE,
+        branch_id INT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE SET NULL
+      )
+    `);
+    console.log('Packages table created');
+
+    // Create subscriptions table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS subscriptions (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        subscriber_id INT NOT NULL,
+        package_id INT NOT NULL,
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        status ENUM('active', 'expired', 'cancelled', 'pending') DEFAULT 'active',
+        payment_status ENUM('paid', 'pending', 'failed') DEFAULT 'pending',
+        total_amount DECIMAL(10, 2) NOT NULL,
+        amount_paid DECIMAL(10, 2) DEFAULT 0,
+        payment_method VARCHAR(50) NOT NULL,
+        notes TEXT,
+        created_by INT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (package_id) REFERENCES packages(id) ON DELETE RESTRICT,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+      )
+    `);
+    console.log('Subscriptions table created');
 
     // Insert default roles
     await connection.query(`
