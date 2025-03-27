@@ -67,15 +67,17 @@ app.use(cors({
 // Parse JSON bodies with size limit
 app.use(express.json({ limit: '10kb' }));
 
-// Database connection with SSL in production
+// Database connection with environment variables
 const pool = mysql.createPool({
-  host: 'localhost',
-  user: 'root',
-  password: '',
-  database: 'flexigym',
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'flexigym',
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0
+  queueLimit: 0,
+  enableKeepAlive: true,
+  ipv6: false // Disable IPv6 to prevent connecting to ::1 instead of 127.0.0.1
 });
 
 // Test database connection
