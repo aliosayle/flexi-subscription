@@ -70,7 +70,7 @@ const POS = () => {
   const fetchItems = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/api/inventory/items');
+      const response = await api.get('/api/inventory');
       setItems(response.data);
     } catch (error) {
       console.error('Error fetching items:', error);

@@ -550,11 +550,15 @@ app.get('/api/inventory', authenticateToken, branchFilter, async (req, res) => {
   }
 });
 
-// Get single inventory item
-app.get('/api/inventory/items/:id', async (req, res) => {
+// Get single inventory item - add support for new endpoint pattern
+app.get('/api/inventory/:id', authenticateToken, branchFilter, async (req, res) => {
   try {
     const { id } = req.params;
-    const [items] = await pool.execute('SELECT * FROM inventory_items WHERE id = ?', [id]);
+    
+    let query = `SELECT * FROM inventory_items WHERE id = ?`;
+    const params = [id];
+    
+    const [items] = await pool.query(query, params);
     
     if (items.length === 0) {
       return res.status(404).json({ message: 'Item not found' });
@@ -585,8 +589,8 @@ app.get('/api/inventory/items/:id', async (req, res) => {
   }
 });
 
-// Create inventory item
-app.post('/api/inventory/items', async (req, res) => {
+// Create inventory item - add support for new endpoint pattern
+app.post('/api/inventory', authenticateToken, branchFilter, async (req, res) => {
   try {
     const { name, description, sku, barcode, quantity, price, cost, category, imageSrc } = req.body;
     
@@ -606,8 +610,8 @@ app.post('/api/inventory/items', async (req, res) => {
     
     // Insert new item
     const [result] = await pool.execute(
-      'INSERT INTO inventory_items (name, description, sku, barcode, quantity, price, cost, category, image_src) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [name, description || '', itemSku, barcode || '', quantity || 0, price, cost, category || '', imageSrc || '']
+      'INSERT INTO inventory_items (name, description, sku, barcode, quantity, price, cost, category, image_src, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [name, description || '', itemSku, barcode || '', quantity || 0, price, cost, category || '', imageSrc || '', req.branch_id || null]
     );
     
     const itemId = result.insertId;
@@ -615,8 +619,8 @@ app.post('/api/inventory/items', async (req, res) => {
     // If there's an initial quantity, create a beginning transaction
     if (quantity && quantity > 0) {
       await pool.execute(
-        'INSERT INTO inventory_transactions (item_id, type, quantity, price, total_amount, notes) VALUES (?, ?, ?, ?, ?, ?)',
-        [itemId, 'beginning', quantity, cost, cost * quantity, 'Initial inventory']
+        'INSERT INTO inventory_transactions (item_id, type, quantity, price, total_amount, notes, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [itemId, 'beginning', quantity, cost, cost * quantity, 'Initial inventory', req.branch_id || null]
       );
     }
     
@@ -647,8 +651,8 @@ app.post('/api/inventory/items', async (req, res) => {
   }
 });
 
-// Update inventory item
-app.put('/api/inventory/items/:id', async (req, res) => {
+// Update inventory item - add support for new endpoint pattern
+app.put('/api/inventory/:id', authenticateToken, branchFilter, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, description, sku, barcode, price, cost, category, imageSrc } = req.body;
@@ -658,8 +662,16 @@ app.put('/api/inventory/items/:id', async (req, res) => {
       return res.status(400).json({ message: 'Missing required fields' });
     }
     
-    // Check if item exists
-    const [existingItems] = await pool.execute('SELECT * FROM inventory_items WHERE id = ?', [id]);
+    // Check if item exists and belongs to the user's branch or is shared
+    let query = 'SELECT * FROM inventory_items WHERE id = ?';
+    const params = [id];
+    
+    if (req.branch_id) {
+      query += ' AND (branch_id = ? OR branch_id IS NULL)';
+      params.push(req.branch_id);
+    }
+    
+    const [existingItems] = await pool.query(query, params);
     if (existingItems.length === 0) {
       return res.status(404).json({ message: 'Item not found' });
     }
@@ -706,13 +718,21 @@ app.put('/api/inventory/items/:id', async (req, res) => {
   }
 });
 
-// Delete inventory item
-app.delete('/api/inventory/items/:id', async (req, res) => {
+// Delete inventory item - add support for new endpoint pattern
+app.delete('/api/inventory/:id', authenticateToken, branchFilter, async (req, res) => {
   try {
     const { id } = req.params;
     
-    // Check if item exists
-    const [existingItems] = await pool.execute('SELECT * FROM inventory_items WHERE id = ?', [id]);
+    // Check if item exists and belongs to the user's branch or is shared
+    let query = 'SELECT * FROM inventory_items WHERE id = ?';
+    const params = [id];
+    
+    if (req.branch_id) {
+      query += ' AND (branch_id = ? OR branch_id IS NULL)';
+      params.push(req.branch_id);
+    }
+    
+    const [existingItems] = await pool.query(query, params);
     if (existingItems.length === 0) {
       return res.status(404).json({ message: 'Item not found' });
     }

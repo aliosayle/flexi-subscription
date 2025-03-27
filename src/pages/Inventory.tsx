@@ -125,7 +125,7 @@ const Inventory = () => {
   // Fetch inventory items from API
   const fetchItems = async () => {
     try {
-      const response = await api.get('/api/inventory/items');
+      const response = await api.get('/api/inventory');
       setItems(response.data);
     } catch (error) {
       console.error('Error fetching items:', error);
@@ -206,11 +206,11 @@ const Inventory = () => {
       
       if (selectedItem) {
         // Update existing item
-        await api.put(`/api/inventory/items/${selectedItem.id}`, itemData);
+        await api.put(`/api/inventory/${selectedItem.id}`, itemData);
         toast.success('Item updated successfully');
       } else {
         // Add new item
-        await api.post('/api/inventory/items', itemData);
+        await api.post('/api/inventory', itemData);
         toast.success('Item added successfully');
       }
       
@@ -398,13 +398,15 @@ const Inventory = () => {
   };
   
   const handleDeleteItem = async (id: string) => {
-    try {
-      await api.delete(`/api/inventory/items/${id}`);
-      toast.success('Item deleted successfully');
-      fetchItems();
-    } catch (error) {
-      console.error('Error deleting item:', error);
-      toast.error('Failed to delete item');
+    if (window.confirm('Are you sure you want to delete this item?')) {
+      try {
+        await api.delete(`/api/inventory/${id}`);
+        toast.success('Item deleted successfully');
+        fetchItems();
+      } catch (error) {
+        console.error('Error deleting item:', error);
+        toast.error('Failed to delete item');
+      }
     }
   };
   
