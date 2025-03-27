@@ -61,7 +61,8 @@ import {
   X,
   FilePlus,
   FileText,
-  Loader2
+  Loader2,
+  Building2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { InventoryItem, InventoryTransaction, TransactionType } from '@/types';
@@ -74,6 +75,8 @@ import {
   ResizableHandle
 } from '@/components/ui/resizable';
 import api from '@/lib/axios';
+import { useAuth } from '@/contexts/AuthContext';
+import { Badge } from '@/components/ui/badge';
 
 // Type for transaction line items
 interface TransactionLineItem {
@@ -96,6 +99,7 @@ const INVENTORY_CATEGORIES = [
 ] as const;
 
 const Inventory = () => {
+  const { selectedBranch } = useAuth();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [transactions, setTransactions] = useState<InventoryTransaction[]>([]);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
@@ -160,7 +164,7 @@ const Inventory = () => {
   useEffect(() => {
     fetchItems();
     fetchTransactions();
-  }, []);
+  }, [selectedBranch]); // Refetch when branch changes
   
   const filteredItems = items.filter(item => 
     item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -432,7 +436,13 @@ const Inventory = () => {
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Inventory Management</h2>
-          <p className="text-muted-foreground">Manage your products and stock levels.</p>
+          {selectedBranch && (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Building2 className="h-4 w-4" />
+              <p>Branch: <span className="font-medium">{selectedBranch.name}</span></p>
+              <Badge variant="outline" className="ml-2">{selectedBranch.company_name}</Badge>
+            </div>
+          )}
         </div>
         <div className="flex gap-2">
           <div className="relative">

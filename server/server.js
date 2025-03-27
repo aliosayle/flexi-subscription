@@ -810,7 +810,7 @@ app.get(['/api/inventory/transactions', '/api/transactions'], authenticateToken,
       FROM inventory_transactions t
       JOIN inventory_items i ON t.item_id = i.id
       LEFT JOIN users u ON t.created_by = u.id
-      WHERE t.branch_id = ? OR t.branch_id IS NULL OR 1=1
+      WHERE (t.branch_id = ? OR t.branch_id IS NULL)
       ORDER BY t.created_at DESC
       LIMIT 100
     `;
@@ -2297,61 +2297,19 @@ process.on('SIGTERM', () => {
 });
 
 // Simple direct endpoint for inventory transactions
-app.get('/api/transactions-direct', async (req, res) => {
+app.get('/api/transactions-direct', authenticateToken, branchFilter, async (req, res) => {
   try {
     let query = `
       SELECT t.*, i.name as item_name, i.sku as item_sku, u.name as created_by_name
       FROM inventory_transactions t
       JOIN inventory_items i ON t.item_id = i.id
       LEFT JOIN users u ON t.created_by = u.id
+      WHERE (t.branch_id = ? OR t.branch_id IS NULL)  
       ORDER BY t.created_at DESC
       LIMIT 100
     `;
 
-    const [transactions] = await pool.execute(query, []);
-
-    // Format response
-    const formattedTransactions = transactions.map(transaction => ({
-      id: transaction.id.toString(),
-      itemId: transaction.item_id.toString(),
-      itemName: transaction.item_name,
-      itemSku: transaction.item_sku,
-      type: transaction.type,
-      quantity: parseInt(transaction.quantity) || 0,
-      price: transaction.price ? parseFloat(transaction.price) : null,
-      totalAmount: parseFloat(transaction.total_amount) || 0,
-      notes: transaction.notes || '',
-      customerSupplier: transaction.customer_supplier || '',
-      paymentStatus: transaction.payment_status || '',
-      createdBy: transaction.created_by ? transaction.created_by.toString() : null,
-      createdByName: transaction.created_by_name || 'System',
-      createdAt: transaction.created_at
-    }));
-
-    res.json(formattedTransactions);
-  } catch (error) {
-    console.error('Error fetching inventory transactions:', error);
-    res.status(500).json({ 
-      message: 'Server error', 
-      error: error.message,
-      details: error.stack 
-    });
-  }
-});
-
-// Get inventory transactions with pagination
-app.get('/api/inventory/transactions', async (req, res) => {
-  try {
-    let query = `
-      SELECT t.*, i.name as item_name, i.sku as item_sku, u.name as created_by_name
-      FROM inventory_transactions t
-      JOIN inventory_items i ON t.item_id = i.id
-      LEFT JOIN users u ON t.created_by = u.id
-      ORDER BY t.created_at DESC
-      LIMIT 100
-    `;
-
-    const [transactions] = await pool.execute(query, []);
+    const [transactions] = await pool.execute(query, [req.branch_id]);
 
     // Format response
     const formattedTransactions = transactions.map(transaction => ({
