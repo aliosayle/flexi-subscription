@@ -50,7 +50,12 @@ const upload = multer({
 });
 
 // Security middleware
-app.use(helmet()); // Adds various HTTP headers for security
+app.use(helmet({
+  contentSecurityPolicy: false, // Disable CSP to prevent CORS issues
+  crossOriginEmbedderPolicy: false, // Disable COEP to prevent CORS issues
+  crossOriginOpenerPolicy: false, // Disable COOP to prevent CORS issues
+  crossOriginResourcePolicy: false, // Disable CORP to prevent CORS issues
+})); // Adds various HTTP headers for security
 app.use(xss()); // Prevent XSS attacks
 app.use(hpp()); // Prevent HTTP Parameter Pollution
 app.use(morgan('combined')); // Logging
