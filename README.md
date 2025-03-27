@@ -1,69 +1,77 @@
-# Welcome to your Lovable project
+# Flexi Subscription
 
-## Project info
+A comprehensive business management system designed for gym and fitness centers with multi-branch support. The application provides subscription management, inventory tracking, point of sale, and reporting features.
 
-**URL**: https://lovable.dev/projects/4344dd9b-1e7c-4723-8a77-26e314ef63e2
+## Features
 
-## How can I edit this code?
+- **Multi-branch Support**: Manage multiple branches with branch-specific data views
+- **Subscription Management**: Track member subscriptions and renewal status
+- **Inventory Management**: Stock tracking and inventory transactions
+- **Point of Sale (POS)**: Process sales and manage transactions
+- **Dashboard**: View key business metrics and analytics
+- **Reports**: Generate sales and performance reports
+- **User Management**: Role-based access control with permissions
 
-There are several ways of editing your application.
+## Tech Stack
 
-**Use Lovable**
+This project is built with:
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/4344dd9b-1e7c-4723-8a77-26e314ef63e2) and start prompting.
+- **Frontend**:
+  - React with TypeScript
+  - Vite for build tooling
+  - Tailwind CSS for styling
+  - shadcn/ui component library
 
-Changes made via Lovable will be committed automatically to this repo.
+- **Backend**:
+  - Node.js
+  - Express.js
+  - MySQL database
 
-**Use your preferred IDE**
+## Getting Started
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### Prerequisites
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+- Node.js & npm - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+- MySQL database
 
-Follow these steps:
+### Installation
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+# Clone the repository
+git clone https://github.com/yourusername/flexi-subscription.git
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# Navigate to the project directory
+cd flexi-subscription
 
-# Step 3: Install the necessary dependencies.
-npm i
+# Install dependencies
+npm install
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Set up environment variables
+cp .env.example .env
+# Edit .env file with your database credentials
+
+# Run database migrations
+node server/setup-db.js
+
+# Start the development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+## Usage
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+After starting the server, navigate to `http://localhost:8080` in your browser to access the application. Use the login credentials:
 
-**Use GitHub Codespaces**
+- **Username**: admin@example.com
+- **Password**: password
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Architecture
 
-## What technologies are used for this project?
+The application follows a client-server architecture:
 
-This project is built with .
+- **Client**: React-based SPA with shadcn/ui and Tailwind CSS
+- **Server**: Express.js REST API with JWT authentication
+- **Database**: MySQL for data persistence
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Acknowledgements
 
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/4344dd9b-1e7c-4723-8a77-26e314ef63e2) and click on Share -> Publish.
-
-## I want to use a custom domain - is that possible?
-
-We don't support custom domains (yet). If you want to deploy your project under your own domain then we recommend using Netlify. Visit our docs for more details: [Custom domains](https://docs.lovable.dev/tips-tricks/custom-domain/)
+This project was initially based on a template by Lovable.
