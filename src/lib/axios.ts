@@ -1,6 +1,11 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://192.168.10.70:5000';
+// Use window.location.hostname to dynamically get the server address
+const getBaseUrl = () => {
+  return `http://${window.location.hostname}:5000`;
+};
+
+const API_BASE_URL = getBaseUrl();
 
 const api = axios.create({
   baseURL: API_BASE_URL,
