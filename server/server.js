@@ -528,7 +528,7 @@ app.delete('/api/packages/:id', authenticateToken, branchFilter, async (req, res
 
 // Get user information from token
 function getUserFromToken(req) {
-  const token = req.headers.authorization?.split(' ')[1];
+  const token = req.headers.authorization && req.headers.authorization.split(' ')[1];
   if (!token) return null;
   
   try {
@@ -907,7 +907,7 @@ app.post(['/api/inventory/transactions', '/api/transactions'], authenticateToken
     // Create transaction
     const [result] = await pool.execute(
       'INSERT INTO inventory_transactions (item_id, type, quantity, price, total_amount, notes, customer_supplier, payment_status, created_by, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [itemId, type, quantity, transactionPrice, totalAmount, notes || '', customerSupplier || '', paymentStatus || '', created_by || null, req.branch_id || null]
+      [itemId, type, quantity, transactionPrice, totalAmount, notes || '', customerSupplier || '', paymentStatus || '', (req.user && req.user.id) || null, req.branch_id || null]
     );
     
     // Update item quantity
@@ -1009,7 +1009,7 @@ app.post(['/api/inventory/bulk-transactions', '/api/bulk-transactions'], authent
         // Create transaction
         const [result] = await connection.execute(
           'INSERT INTO inventory_transactions (item_id, type, quantity, price, total_amount, notes, customer_supplier, payment_status, created_by, branch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [itemId, type, quantity, transactionPrice, totalAmount, notes || '', customerSupplier || '', paymentStatus || '', req.user?.id || null, req.branch_id || null]
+          [itemId, type, quantity, transactionPrice, totalAmount, notes || '', customerSupplier || '', paymentStatus || '', (req.user && req.user.id) || null, req.branch_id || null]
         );
         
         // Update item quantity
@@ -1440,7 +1440,7 @@ app.delete('/api/users/:id', authenticateToken, async (req, res) => {
         [userId]
       );
       
-      if (userToDelete[0]?.role_name === 'admin') {
+      if (userToDelete[0] && userToDelete[0].role_name === 'admin') {
         return res.status(400).json({ error: 'Cannot delete the last admin user' });
       }
     }

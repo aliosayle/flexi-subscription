@@ -18,26 +18,18 @@ trap 'handle_error $LINENO' ERR
 
 # Check Node.js version and install compatible version if needed
 echo "Checking Node.js version..."
-NODE_VERSION=$(node -v | cut -d'v' -f2)
+NODE_VERSION=$(node -v | cut -d'v' -f2 || echo "0.0.0")
 NODE_MAJOR_VERSION=$(echo $NODE_VERSION | cut -d'.' -f1)
 
 # We need at least Node.js v16 for Vite
 if [ "$NODE_MAJOR_VERSION" -lt 16 ]; then
   echo "Node.js version $NODE_VERSION is not compatible. Installing Node.js v18..."
-  # Install NVM if not already installed
-  if [ ! -d "$HOME/.nvm" ]; then
-    echo "Installing NVM..."
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh | bash
-    export NVM_DIR="$HOME/.nvm"
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-  else
-    export NVM_DIR="$HOME/.nvm"
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-  fi
   
-  # Install Node.js v18
-  nvm install 18
-  nvm use 18
+  # Install Node.js 18.x
+  echo "Installing Node.js 18.x..."
+  # Update the repository sources
+  curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+  sudo apt-get install -y nodejs
   
   echo "Node.js $(node -v) installed successfully"
 fi
@@ -58,6 +50,15 @@ cd $APP_DIR
 echo "Pulling latest changes from git repository..."
 git pull
 
+# Fix optional chaining in server.js for older Node.js versions
+echo "Checking for optional chaining in server.js..."
+if [ "$NODE_MAJOR_VERSION" -lt 14 ]; then
+  echo "Fixing optional chaining in server.js for compatibility..."
+  # Replace ?.
+  sed -i 's/\([a-zA-Z0-9_\.]\+\)?\./$1 \&\& $1./g' server/server.js
+  echo "Fixed optional chaining in server.js"
+fi
+
 # Server setup
 echo "Setting up server..."
 cd server
@@ -70,6 +71,8 @@ cp .env.production .env
 # Build the frontend
 echo "Building frontend..."
 cd ..
+# Clear node_modules to avoid any conflicts
+rm -rf node_modules
 npm ci # Using npm ci for cleaner installs
 npm run build
 
