@@ -63,22 +63,26 @@ app.use(xss()); // Prevent XSS attacks
 app.use(hpp()); // Prevent HTTP Parameter Pollution
 app.use(morgan('combined')); // Logging
 
-// Rate limiting
+// Rate limiting - DISABLED DUE TO 429 ERRORS
+/*
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Limit each IP to 100 requests per windowMs
   message: 'Too many requests from this IP, please try again later.'
 });
+*/
 
-// Apply rate limiting to all routes
-app.use(limiter);
+// Apply rate limiting to all routes - DISABLED DUE TO 429 ERRORS
+// app.use(limiter);
 
-// Stricter rate limit for auth routes
+// Stricter rate limit for auth routes - DISABLED DUE TO 429 ERRORS
+/*
 const authLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 5, // Limit each IP to 5 login attempts per hour
   message: 'Too many login attempts, please try again later.'
 });
+*/
 
 // CORS configuration
 app.use(cors({
@@ -161,8 +165,8 @@ const validateLogin = [
   }
 ];
 
-// Enhanced login route with validation and rate limiting
-app.post('/api/auth/login', authLimiter, validateLogin, async (req, res) => {
+// Enhanced login route with validation - rate limiting disabled
+app.post('/api/auth/login', validateLogin, async (req, res) => {
   try {
     const { email, password } = req.body;
     
