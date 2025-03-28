@@ -34,7 +34,15 @@ const upload = multer({
 });
 
 // Security middleware
-app.use(helmet()); // Adds various HTTP headers for security
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      connectSrc: ["'self'", "http://localhost:8080", "http://192.168.10.70:8080", "http://161.97.177.233:8080", "http://161.97.177.233:5000", "http://161.97.177.233"]
+    }
+  }
+})); // Adds various HTTP headers for security
 app.use(xss()); // Prevent XSS attacks
 app.use(hpp()); // Prevent HTTP Parameter Pollution
 app.use(morgan('combined')); // Logging
@@ -186,8 +194,9 @@ app.post('/api/auth/login', authLimiter, validateLogin, async (req, res) => {
     res.cookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 3600000 // 1 hour
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      maxAge: 3600000, // 1 hour
+      domain: process.env.NODE_ENV === 'production' ? '161.97.177.233' : undefined
     });
     
     res.json({
