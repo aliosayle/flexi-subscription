@@ -66,7 +66,11 @@ const authLimiter = rateLimit({
 
 // CORS configuration
 app.use(cors({
-  origin: ['http://localhost:8080', 'http://192.168.10.70:8080', 'http://161.97.177.233:8080', 'http://161.97.177.233', process.env.FRONTEND_URL],
+  origin: [
+    'http://localhost:8080', 
+    'http://192.168.10.70:8080',
+    'http://161.97.177.233:8080'
+  ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
@@ -77,10 +81,10 @@ app.use(express.json({ limit: '10kb' }));
 
 // Database connection with SSL in production
 const pool = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'flexigym',
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0
