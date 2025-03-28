@@ -27,8 +27,13 @@ const pageTitles: PageTitle = {
 
 export function Header() {
   const location = useLocation();
-  const { user, logout } = useAuth();
-  const title = pageTitles[location.pathname] || 'Kinshasa Mall Gym';
+  const { user, selectedBranch, logout } = useAuth();
+  
+  // Get page title or use dynamic company/branch title
+  const pageTitle = pageTitles[location.pathname];
+  const companyName = selectedBranch?.company_name || 'FlexiGym';
+  const branchName = selectedBranch?.name || '';
+  const title = pageTitle || `${companyName}${branchName ? ` - ${branchName}` : ''}`;
   
   // Get user initials for avatar
   const getInitials = () => {

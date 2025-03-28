@@ -15,7 +15,6 @@ import Inventory from "@/pages/Inventory";
 import Users from "@/pages/Users";
 import NotFound from "@/pages/NotFound";
 import Login from "@/pages/Login";
-import Register from "@/pages/Register";
 import Subscribers from "@/pages/Subscribers";
 import SalesReport from "@/pages/SalesReport";
 import Companies from './pages/Companies';
@@ -49,7 +48,6 @@ const AppWithProviders = () => (
       <Routes>
         {/* Public routes */}
         <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
 
         {/* Protected routes */}
         <Route 

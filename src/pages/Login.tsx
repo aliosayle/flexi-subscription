@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -141,7 +141,7 @@ export default function Login() {
           </CardContent>
           <CardFooter className="flex justify-center">
             <div className="mt-4 text-sm text-center text-muted-foreground">
-              Don't have an account? <Link to="/register" className="text-primary hover:underline">Register here</Link>
+              Contact your administrator if you need access to the system
             </div>
           </CardFooter>
         </Card>

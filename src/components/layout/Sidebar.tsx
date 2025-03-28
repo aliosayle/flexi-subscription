@@ -38,7 +38,12 @@ const navItems: NavItem[] = [
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, selectedBranch } = useAuth();
+
+  // Get dynamic company/branch name
+  const companyName = selectedBranch?.company_name || 'FlexiGym';
+  const branchName = selectedBranch?.name || '';
+  const businessName = `${companyName}${branchName ? ` - ${branchName}` : ''}`;
 
   // Filter nav items based on user role
   const filteredNavItems = navItems.filter(item => {
@@ -56,8 +61,8 @@ export function Sidebar() {
     >
       <div className="flex items-center justify-between p-4 h-16 border-b border-border">
         {!collapsed && (
-          <h1 className="text-xl font-semibold text-sidebar-foreground animate-fade-in">
-            Kinshasa Mall Gym
+          <h1 className="text-xl font-semibold text-sidebar-foreground animate-fade-in truncate">
+            {businessName}
           </h1>
         )}
         <Button
