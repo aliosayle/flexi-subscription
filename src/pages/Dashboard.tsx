@@ -201,7 +201,7 @@ export default function Dashboard() {
                         </p>
                       </div>
                     </div>
-                    {activity.amount > 0 && (
+                    {activity.amount && typeof activity.amount === 'number' && activity.amount > 0 && (
                       <div className="text-right">
                         <p className="text-sm font-medium">${activity.amount.toFixed(2)}</p>
                       </div>
