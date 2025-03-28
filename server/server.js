@@ -1165,26 +1165,26 @@ app.get('/api/sales/summary', authenticateToken, branchFilter, async (req, res) 
     // Define grouping based on period
     switch (period) {
       case 'daily':
-        groupBy = 'DATE(created_at)';
+        groupBy = "DATE_FORMAT(created_at, '%Y-%m-%d')";
         dateFormat = '%Y-%m-%d';
         break;
       case 'weekly':
-        groupBy = 'YEARWEEK(created_at)';
+        groupBy = "YEARWEEK(created_at)";
         dateFormat = '%Y-%u';
         break;
       case 'monthly':
-        groupBy = 'MONTH(created_at), YEAR(created_at)';
+        groupBy = "DATE_FORMAT(created_at, '%Y-%m')";
         dateFormat = '%Y-%m';
         break;
       default:
-        groupBy = 'DATE(created_at)';
+        groupBy = "DATE_FORMAT(created_at, '%Y-%m-%d')";
         dateFormat = '%Y-%m-%d';
     }
     
     // Build query with optional date range
     let query = `
       SELECT 
-        DATE_FORMAT(created_at, '${dateFormat}') as period,
+        ${groupBy} as period,
         COUNT(*) as count,
         SUM(subtotal) as subtotal,
         SUM(tax) as tax,
@@ -1202,7 +1202,7 @@ app.get('/api/sales/summary', authenticateToken, branchFilter, async (req, res) 
       queryParams.push(startDate, endDate);
     }
     
-    query += ` GROUP BY ${groupBy} ORDER BY created_at ASC`;
+    query += ` GROUP BY ${groupBy} ORDER BY period ASC`;
     
     const [results] = await pool.execute(query, queryParams);
     
