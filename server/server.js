@@ -16,6 +16,22 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
 
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise);
+  console.error('Reason:', reason);
+  // Don't crash the server, but log the issue
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  // Log the error but don't exit in production
+  if (process.env.NODE_ENV !== 'production') {
+    process.exit(1);
+  }
+});
+
 // Multer configuration for file uploads
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -547,9 +563,43 @@ function branchFilter(req, res, next) {
   const user = getUserFromToken(req);
   if (!user) return next();
   
-  // Set branch_id for filtering
-  req.branch_id = user.selected_branch_id;
-  next();
+  // If user has selected branch, use it and continue
+  if (user.selected_branch_id) {
+    req.branch_id = user.selected_branch_id;
+    return next();
+  }
+  
+  // If no branch is selected, find a default one
+  pool.execute(
+    `SELECT ub.branch_id, b.company_id 
+     FROM user_branches ub 
+     JOIN branches b ON ub.branch_id = b.id
+     WHERE ub.user_id = ?
+     ORDER BY b.is_main DESC LIMIT 1`,
+    [user.id]
+  )
+  .then(([branches]) => {
+    if (branches && branches.length > 0) {
+      // Set the default branch
+      req.branch_id = branches[0].branch_id;
+      
+      // Also update the user's selected branch in the database for future requests
+      pool.execute(
+        'UPDATE users SET selected_branch_id = ? WHERE id = ?',
+        [branches[0].branch_id, user.id]
+      ).catch(err => console.error('Error updating user selected branch:', err));
+    } else {
+      // If no branches found, set to null
+      req.branch_id = null;
+    }
+    // Continue with middleware after branch is determined
+    next();
+  })
+  .catch(err => {
+    console.error('Error finding default branch:', err);
+    req.branch_id = null;
+    next();
+  });
 }
 
 // Get inventory items with pagination
@@ -2387,3 +2437,22 @@ app.get('/api/transactions-direct', authenticateToken, branchFilter, async (req,
     });
   }
 }); 
+
+// Global error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Global error handler caught:', err);
+  
+  // Don't expose stack traces in production
+  const errorDetails = process.env.NODE_ENV === 'production' 
+    ? { message: 'An error occurred' }
+    : { 
+        message: err.message, 
+        stack: err.stack,
+        details: err 
+      };
+      
+  res.status(500).json({
+    status: 'error',
+    ...errorDetails
+  });
+});

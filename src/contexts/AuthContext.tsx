@@ -16,6 +16,7 @@ interface Branch {
   name: string;
   company_id: number;
   company_name: string;
+  is_main: boolean;
 }
 
 // User type definition
@@ -233,14 +234,40 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }}
     >
       {/* Branch Selection Dialog */}
-      <Dialog open={showBranchDialog} onOpenChange={setShowBranchDialog}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog 
+        open={showBranchDialog} 
+        onOpenChange={(open) => {
+          // Only allow closing if a branch is selected
+          if (!open && !selectedBranch && branches.length > 0) {
+            // Force select the first branch if trying to close without selection
+            selectBranch(branches.find(b => b.is_main)?.branch_id || branches[0].branch_id);
+            return;
+          }
+          setShowBranchDialog(open);
+        }}
+      >
+        <DialogContent className="sm:max-w-md" onEscapeKeyDown={(e) => {
+          // Prevent closing with ESC key if no branch selected
+          if (!selectedBranch && branches.length > 0) {
+            e.preventDefault();
+          }
+        }} onPointerDownOutside={(e) => {
+          // Prevent closing by clicking outside if no branch selected
+          if (!selectedBranch && branches.length > 0) {
+            e.preventDefault();
+          }
+        }}>
           <DialogHeader>
             <DialogTitle>Select Branch</DialogTitle>
           </DialogHeader>
           <div className="py-6">
             <p className="mb-4 text-sm text-muted-foreground">
               You have access to multiple branches. Please select which branch you want to use.
+              {!selectedBranch && branches.length > 0 && (
+                <span className="text-red-500 font-medium block mt-1">
+                  You must select a branch to continue
+                </span>
+              )}
             </p>
             <Select
               onValueChange={(value) => selectBranch(Number(value))}
@@ -253,6 +280,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 {branches.map((branch) => (
                   <SelectItem key={branch.branch_id} value={branch.branch_id.toString()}>
                     {branch.name} ({branch.company_name})
+                    {branch.is_main && " (Main Branch)"}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -262,12 +290,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             <Button 
               onClick={() => {
                 if (branches.length > 0 && !selectedBranch) {
-                  // If no branch is selected but branches exist, select the first one
-                  selectBranch(branches[0].branch_id);
-                } else {
+                  // If no branch is selected but branches exist, prefer main branch or select the first one
+                  const mainBranch = branches.find(b => b.is_main);
+                  selectBranch(mainBranch?.branch_id || branches[0].branch_id);
+                } else if (selectedBranch) {
                   setShowBranchDialog(false);
                 }
               }}
+              disabled={branches.length === 0}
             >
               Continue
             </Button>
