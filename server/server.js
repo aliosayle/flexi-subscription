@@ -56,35 +56,27 @@ const authLimiter = rateLimit({
   message: 'Too many login attempts, please try again later.'
 });
 
-// CORS configuration - allow credentials with specific origin
+// Simple CORS configuration to debug
 app.use((req, res, next) => {
-  // Allow the specific origin
-  const origin = req.headers.origin;
-  res.header('Access-Control-Allow-Origin', origin || 'http://161.97.177.233:8080');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Allow-Credentials', 'true');
+  // Log CORS details for debugging
+  console.log('Request origin:', req.headers.origin);
+  console.log('Request method:', req.method);
   
-  // Handle preflight requests
+  // Allow any origin for debugging
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  
+  // Handle preflight
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
   }
+  
   next();
 });
 
-// Update CORS middleware config too
-app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps, curl, etc)
-    if(!origin) return callback(null, true);
-    return callback(null, origin);
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  credentials: true,
-  preflightContinue: false,
-  optionsSuccessStatus: 204
-}));
+// Remove any other CORS middleware for debugging
+// app.use(cors({...}));
 
 // Parse JSON bodies with size limit
 app.use(express.json({ limit: '10kb' }));
